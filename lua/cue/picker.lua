@@ -210,11 +210,10 @@ local function sort_artifacts(artifacts)
 end
 
 --- Copy a value to the clipboard and notify
----@param prompt_bufnr integer
 ---@param getter function  receives the selected entry, returns the string to copy
 ---@param label string
-local function copy_to_clipboard(prompt_bufnr, getter, label)
-  local entry = action_state.get_selected_entry(prompt_bufnr)
+local function copy_to_clipboard(getter, label)
+  local entry = action_state.get_selected_entry()
   if not entry then return end
   local value = getter(entry)
   if not value or value == "" or value == vim.NIL then
@@ -269,14 +268,14 @@ function M.pick_artifacts(opts)
 
       -- Copy path to clipboard
       map({ 'i', 'n' }, '<C-y>', function()
-        copy_to_clipboard(prompt_bufnr, function(e)
+        copy_to_clipboard(function(e)
           return vim.fn.fnamemodify(e.path, ":p")
         end, "path")
       end)
 
       -- Copy hash to clipboard
       map({ 'i', 'n' }, '<C-h>', function()
-        copy_to_clipboard(prompt_bufnr, function(e) return e.hash end, "hash")
+        copy_to_clipboard(function(e) return e.hash end, "hash")
       end)
 
       return true
