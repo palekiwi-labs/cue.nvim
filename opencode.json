@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false,
+  "lsp": false,
+  "instructions": ["~/.config/opencode/spabreaks/spabreaks/AGENTS.md"],
+  "model": "zai-coding-plan/glm-5.2",
+  "default_agent": "plan",
+  "agent": {
+    "explore": {
+      "model": "zai-coding-plan/glm-5.2"
+    }
+  },
+}
