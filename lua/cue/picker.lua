@@ -209,19 +209,50 @@ local function sort_artifacts(artifacts)
   return artifacts
 end
 
---- Copy a value to the clipboard and notify
----@param getter function  receives the selected entry, returns the string to copy
+--- Copy a value to the clipboard and notify.
+--- Honors multi-selection: when entries are toggled via <Tab>, all values
+--- are copied space-separated. Falls back to the highlighted entry when
+--- nothing is multi-selected. Entries whose getter returns nil/""/vim.NIL
+--- are silently skipped.
+---@param prompt_bufnr integer
+---@param getter function  receives a selected entry, returns the string to copy
 ---@param label string
-local function copy_to_clipboard(getter, label)
-  local entry = action_state.get_selected_entry()
-  if not entry then return end
-  local value = getter(entry)
-  if not value or value == "" or value == vim.NIL then
+local function copy_to_clipboard(prompt_bufnr, getter, label)
+  local picker = action_state.get_current_picker(prompt_bufnr)
+  local multi  = picker and picker:get_multi_selection() or {}
+
+  local entries = {}
+  if next(multi) ~= nil then
+    for _, e in ipairs(multi) do
+      table.insert(entries, e)
+    end
+  else
+    local entry = action_state.get_selected_entry()
+    if entry then table.insert(entries, entry) end
+  end
+
+  if #entries == 0 then return end
+
+  local values = {}
+  for _, e in ipairs(entries) do
+    local v = getter(e)
+    if v and v ~= "" and v ~= vim.NIL then
+      table.insert(values, tostring(v))
+    end
+  end
+
+  if #values == 0 then
     vim.notify("Nothing to copy for " .. label, vim.log.levels.WARN)
     return
   end
-  vim.fn.setreg("+", value)
-  vim.notify("Copied " .. label .. ": " .. tostring(value), vim.log.levels.INFO)
+
+  local joined = table.concat(values, " ")
+  vim.fn.setreg("+", joined)
+  if #values == 1 then
+    vim.notify("Copied " .. label .. ": " .. joined, vim.log.levels.INFO)
+  else
+    vim.notify("Copied " .. label .. " (" .. #values .. " items)", vim.log.levels.INFO)
+  end
 end
 
 -- ─── Pickers ──────────────────────────────────────────────────────────────────
@@ -268,14 +299,14 @@ function M.pick_artifacts(opts)
 
       -- Copy path to clipboard
       map({ 'i', 'n' }, '<C-y>', function()
-        copy_to_clipboard(function(e)
+        copy_to_clipboard(prompt_bufnr, function(e)
           return vim.fn.fnamemodify(e.path, ":p")
         end, "path")
       end)
 
       -- Copy hash to clipboard
       map({ 'i', 'n' }, '<C-h>', function()
-        copy_to_clipboard(function(e) return e.hash end, "hash")
+        copy_to_clipboard(prompt_bufnr, function(e) return e.hash end, "hash")
       end)
 
       return true
