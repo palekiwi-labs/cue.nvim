@@ -90,7 +90,7 @@ end
 --- Open the current cue context file in the editor
 function M.open_context()
   local cmd = "cue context path 2>/dev/null"
-  local output, err = M.execute_command(cmd)
+  local output = M.execute_command(cmd)
 
   if not output or output == "" then
     vim.notify("Context not found, initializing...", vim.log.levels.INFO)
@@ -99,6 +99,7 @@ function M.open_context()
       vim.notify("Error initializing context: " .. (init_err or "unknown"), vim.log.levels.ERROR)
       return
     end
+    local err
     output, err = M.execute_command(cmd)
     if not output or output == "" then
       vim.notify("Error: " .. (err or "No current context found after init"), vim.log.levels.ERROR)
