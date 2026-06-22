@@ -105,11 +105,13 @@ function M.open_context()
   vim.cmd.edit(path)
 end
 
---- Open the current branch's log file and jump to the end
-function M.open_log()
-  local branch = M.get_current_branch()
+--- Open the branch's log file and jump to the end.
+--- Default branch is the current git branch; pass a branch name to override.
+---@param branch string|nil  branch name (nil = current)
+function M.open_log(branch)
+  branch = branch or M.get_current_branch()
   if not branch then
-    vim.notify("Error: Could not determine current git branch", vim.log.levels.ERROR)
+    vim.notify("Error: Could not determine git branch", vim.log.levels.ERROR)
     return
   end
 
