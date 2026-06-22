@@ -13,6 +13,7 @@
       in
       {
         devShells.default = pkgs.mkShell {
+          name = "cue-nvim";
           buildInputs = with pkgs; [
             # Lua runtime matching Neovim (LuaJIT = Lua 5.1 + JIT).
             luajit
