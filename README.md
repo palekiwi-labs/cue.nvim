@@ -1,17 +1,16 @@
 # cue.nvim
 
-Neovim plugin for the `cue` artifact tracker. Provides Telescope pickers,
-`:Cue*` commands, and a floating log form for working with cue artifacts
-from within Neovim.
+Neovim plugin for the `cue` artifact tracker. Telescope pickers and `:Cue*`
+commands for working with cue artifacts.
 
 ## Requirements
 
-- Neovim (built with LuaJIT)
-- The `cue` CLI, installed and on `$PATH`
+- Neovim (LuaJIT)
+- `cue` CLI on `$PATH`
 - [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim)
 - [snacks.nvim](https://github.com/folke/snacks.nvim)
 
-## Installation (lazy.nvim)
+## Install (lazy.nvim)
 
 ```lua
 {
@@ -20,9 +19,7 @@ from within Neovim.
     "nvim-telescope/telescope.nvim",
     "folke/snacks.nvim",
   },
-  config = function()
-    require("cue").setup({})
-  end,
+  config = function() require("cue").setup({}) end,
 }
 ```
 
@@ -30,11 +27,10 @@ from within Neovim.
 
 | Command | Description |
 |---|---|
-| `:CuePick [type]` | Open the artifact picker (optional type filter) |
-| `:CueAdd` | Add a new artifact (prompts for type, filename, root) |
-| `:CueAddBin <file>` | Add a `bin` artifact |
-| `:CueAddTrace <file>` | Add a `trace` artifact |
-| `:CueAddTmp <file>` | Add a `tmp` artifact |
-| `:CueAddRef <file>` | Add a `ref` artifact |
-| `:CueAddDoc <file>` | Add a `doc` artifact |
-| `:CueLog [title]` | Add a log entry (no args opens the form) |
+| `:CuePick [type] [key=value ...]` | Open artifact picker (`all`, `branch=X`, optional `type` filter) |
+| `:CueAdd [type] [file] [key=value ...]` | Add artifact (no args = wizard; `root`, `force`, `branch=X`, etc.) |
+| `:CueLog [branch]` | Open branch log file (default: current branch) |
+| `:CueContext` | Open current context file |
+
+All commands are thin wrappers over `require('cue').*` functions; bind those
+directly for keybinding-driven workflows.
