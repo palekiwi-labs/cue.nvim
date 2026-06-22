@@ -1,9 +1,54 @@
 --- Register all :Cue* user commands
 local M = {}
 
+--- Generic arg parser shared by :CuePick and :CueAdd.
+--- Tokens are whitespace-separated. Three shapes:
+---   "todo"          -> positional
+---   "root" / "all"  -> flag (must be in KNOWN_FLAGS)
+---   "branch=master" -> kwargs (value is everything after first =)
+--- No quote handling; values with spaces will break. Acceptable for prototype.
+local KNOWN_FLAGS = { root = true, force = true, all = true }
+
+local function parse_args(args)
+  local out = { positional = {}, flags = {}, kwargs = {} }
+  for token in vim.gsplit(args or "", "%s+", true) do
+    if token ~= "" then
+      local k, v = token:match("^([%w_]+)=(.+)$")
+      if k then
+        out.kwargs[k] = v
+      elseif KNOWN_FLAGS[token] then
+        out.flags[token] = true
+      else
+        table.insert(out.positional, token)
+      end
+    end
+  end
+  return out
+end
+
+--- Build opts table for core.add() from parsed args.
+--- Known kwargs (branch, commit) become opts fields;
+--- remaining kwargs become frontmatter key=value pairs.
+local function build_add_opts(category, parsed)
+  local frontmatter = nil
+  for k, v in pairs(parsed.kwargs) do
+    if k ~= "branch" and k ~= "commit" then
+      frontmatter = frontmatter or {}
+      frontmatter[k] = v
+    end
+  end
+  return {
+    category    = category == "spec" and nil or category,
+    root        = parsed.flags.root and true or nil,
+    force       = parsed.flags.force and true or nil,
+    branch      = parsed.kwargs.branch,
+    commit      = parsed.kwargs.commit,
+    frontmatter = frontmatter,
+  }
+end
+
 function M.setup()
   local core   = require('cue.core')
-  local log    = require('cue.log')
   local picker = require('cue.picker')
 
   local function prompt_root_and_add(filename, opts)
@@ -62,112 +107,72 @@ function M.setup()
     end)
   end
 
-  -- :CueLog [title]
-  vim.api.nvim_create_user_command('CueLog', function(args)
-    local title = vim.trim(args.args)
-    if title ~= "" then
-      log.log_add({ title = title, found = {}, decided = {}, open = {} })
-    else
-      log.log_form()
-    end
-  end, {
-    nargs = "*",
-    desc  = "Add a cue log entry (no args = open form, with args = title-only fast path)",
-  })
-
-  -- :CueAdd
-  vim.api.nvim_create_user_command('CueAdd', function()
+  local function run_wizard()
     select_category(function(category)
       prompt_filename(category, function(filename)
         prompt_root_and_add(filename, { category = category == "spec" and nil or category })
       end)
     end)
-  end, {
-    nargs = 0,
-    desc  = "Add a new cue artifact (prompts for type, filename, then root status)",
-  })
+  end
 
-  -- :CueAddBin <filename>
-  vim.api.nvim_create_user_command('CueAddBin', function(args)
-    local filename = args.args
-    if not filename or filename == "" then
-      vim.notify("Usage: :CueAddBin <filename>", vim.log.levels.ERROR)
-      return
-    end
-    prompt_root_and_add(filename, { category = 'bin' })
-  end, {
-    nargs    = 1,
-    complete = 'file',
-    desc     = "Add a new cue bin artifact and open it for editing",
-  })
-
-  -- :CueAddTrace <filename>
-  vim.api.nvim_create_user_command('CueAddTrace', function(args)
-    local filename = args.args
-    if not filename or filename == "" then
-      vim.notify("Usage: :CueAddTrace <filename>", vim.log.levels.ERROR)
-      return
-    end
-    prompt_root_and_add(filename, { category = 'trace' })
-  end, {
-    nargs    = 1,
-    complete = 'file',
-    desc     = "Add a new cue trace artifact and open it for editing",
-  })
-
-  -- :CueAddTmp <filename>
-  vim.api.nvim_create_user_command('CueAddTmp', function(args)
-    local filename = args.args
-    if not filename or filename == "" then
-      vim.notify("Usage: :CueAddTmp <filename>", vim.log.levels.ERROR)
-      return
-    end
-    prompt_root_and_add(filename, { category = 'tmp' })
-  end, {
-    nargs    = 1,
-    complete = 'file',
-    desc     = "Add a new cue tmp artifact and open it for editing",
-  })
-
-  -- :CueAddRef <filename>
-  vim.api.nvim_create_user_command('CueAddRef', function(args)
-    local filename = args.args
-    if not filename or filename == "" then
-      vim.notify("Usage: :CueAddRef <filename>", vim.log.levels.ERROR)
-      return
-    end
-    prompt_root_and_add(filename, { category = 'ref' })
-  end, {
-    nargs    = 1,
-    complete = 'file',
-    desc     = "Add a new cue ref artifact and open it for editing",
-  })
-
-  -- :CueAddDoc <filename>
-  vim.api.nvim_create_user_command('CueAddDoc', function(args)
-    local filename = args.args
-    if not filename or filename == "" then
-      vim.notify("Usage: :CueAddDoc <filename>", vim.log.levels.ERROR)
-      return
-    end
-    prompt_root_and_add(filename, { category = 'doc' })
-  end, {
-    nargs    = 1,
-    complete = 'file',
-    desc     = "Add a new cue doc artifact and open it for editing",
-  })
-
-  -- :CuePick [type]
+  -- :CuePick [type] [key=value ...] [all]
+  -- Examples:
+  --   :CuePick
+  --   :CuePick todo
+  --   :CuePick todo branch=master
+  --   :CuePick todo all
   vim.api.nvim_create_user_command('CuePick', function(args)
-    local type_arg = vim.trim(args.args)
+    local parsed = parse_args(args.args)
     local opts = {}
-    if type_arg ~= "" then
-      opts.type = type_arg
-    end
+    for k, v in pairs(parsed.kwargs) do opts[k] = v end
+    for k in pairs(parsed.flags) do opts[k] = true end
+    if parsed.positional[1] then opts.type = parsed.positional[1] end
     picker.pick_artifacts(opts)
   end, {
+    nargs = "*",
+    desc  = "Open cue artifact picker (e.g. :CuePick todo branch=master all)",
+  })
+
+  -- :CueAdd [type] [filename] [key=value ...] [root] [force]
+  -- No args           -> full wizard (type, filename, root status prompts)
+  -- Type only         -> prompt filename, no root prompt (pinned by default)
+  -- Type + filename   -> no prompts unless root flag forces root placement
+  -- Extra key=value   -> branch/commit become opts, rest become frontmatter
+  vim.api.nvim_create_user_command('CueAdd', function(args)
+    local parsed = parse_args(args.args)
+    if #parsed.positional == 0 then return run_wizard() end
+    local category = parsed.positional[1]
+    local filename = parsed.positional[2]
+    local opts     = build_add_opts(category, parsed)
+    local function go(fn) core.add(fn, opts) end
+    if filename then
+      go(filename)
+    else
+      prompt_filename(category, go)
+    end
+  end, {
+    nargs = "*",
+    desc  = "Add a cue artifact (no args = wizard; e.g. :CueAdd todo weekly.md root branch=master)",
+  })
+
+  -- :CueLog [branch]
+  -- No arg  -> open current branch log
+  -- <branch> -> open that branch's log
+  vim.api.nvim_create_user_command('CueLog', function(args)
+    local branch = vim.trim(args.args or "")
+    core.open_log(branch ~= "" and branch or nil)
+  end, {
     nargs = "?",
-    desc  = "Open cue artifact picker (optional type filter)",
+    desc  = "Open cue log file (optional branch override)",
+  })
+
+  -- :CueContext
+  -- Open (or initialize) the current branch's context file.
+  vim.api.nvim_create_user_command('CueContext', function()
+    core.open_context()
+  end, {
+    nargs = 0,
+    desc  = "Open (or initialize) current cue context file",
   })
 end
 
