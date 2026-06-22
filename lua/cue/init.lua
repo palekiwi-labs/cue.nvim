@@ -74,6 +74,11 @@ function M.pick_branch_artifacts()
   return require('cue.picker').pick_branch_artifacts()
 end
 
+--- Open branch selector, then open that branch's log file
+function M.pick_logs()
+  return require('cue.picker').pick_logs()
+end
+
 -- ─── Re-export log functions ──────────────────────────────────────────────────
 
 --- Add a cue log entry programmatically

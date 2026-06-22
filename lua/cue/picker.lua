@@ -470,4 +470,34 @@ function M.pick_branch_artifacts()
   end)
 end
 
+--- Open a branch selector, then open that branch's log file.
+--- Symmetric to pick_context() and pick_branch_artifacts().
+function M.pick_logs()
+  local cue_dir = ".cue"
+  if vim.fn.isdirectory(cue_dir) == 0 then
+    vim.notify("Error: .cue directory not found", vim.log.levels.ERROR)
+    return
+  end
+
+  local branches = {}
+  local p = io.popen('ls -d ' .. cue_dir .. '/*/ 2>/dev/null')
+  if p then
+    for line in p:lines() do
+      local branch = line:match(".cue/(.+)/")
+      if branch then table.insert(branches, branch) end
+    end
+    p:close()
+  end
+
+  if #branches == 0 then
+    vim.notify("No branches found", vim.log.levels.INFO)
+    return
+  end
+
+  local Snacks = require('snacks')
+  Snacks.picker.select(branches, { prompt = "Select Branch (log):" }, function(branch)
+    if branch then require('cue.core').open_log(branch) end
+  end)
+end
+
 return M
