@@ -79,17 +79,4 @@ function M.pick_logs()
   return require('cue.picker').pick_logs()
 end
 
--- ─── Re-export log functions ──────────────────────────────────────────────────
-
---- Add a cue log entry programmatically
----@param entry table  { title, body?, found?, decided?, open? }
-function M.log_add(entry)
-  return require('cue.log').log_add(entry)
-end
-
---- Open the floating cue log form
-function M.log_form()
-  return require('cue.log').log_form()
-end
-
 return M
