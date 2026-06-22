@@ -16,22 +16,11 @@ function M.is_done(artifact)
   return status and type(status) == "string" and config.DONE_STATUSES[status:lower()] or false
 end
 
---- Check if artifact status is archived
----@param artifact table
----@return boolean
-function M.is_archived(artifact)
-  if not artifact.frontmatter or artifact.frontmatter == vim.NIL then
-    return false
-  end
-  local status = artifact.frontmatter.status
-  return status and type(status) == "string" and status:lower() == "archived" or false
-end
-
---- Check if artifact is done or archived
+--- Check if artifact is done
 ---@param artifact table
 ---@return boolean
 function M.is_finished(artifact)
-  return M.is_done(artifact) or M.is_archived(artifact)
+  return M.is_done(artifact)
 end
 
 --- Slugify text for use as a filename

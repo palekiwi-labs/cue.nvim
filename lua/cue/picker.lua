@@ -105,9 +105,7 @@ local function make_mem_entry_maker(opts)
       if fm.title and fm.title ~= vim.NIL and fm.title ~= "" then
         display_name = fm.title .. " (" .. display_name .. ")"
       end
-      if core.is_archived(entry) then
-        highlight = "CueStatusArchived"
-      elseif core.is_done(entry) then
+      if core.is_done(entry) then
         highlight = "CueStatusDone"
       end
     end

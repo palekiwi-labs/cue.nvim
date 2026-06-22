@@ -15,7 +15,6 @@ local COLORS = {
 
 function M.setup()
   vim.api.nvim_set_hl(0, "CueStatusDone",     { fg = COLORS.grey, strikethrough = true })
-  vim.api.nvim_set_hl(0, "CueStatusArchived", { fg = COLORS.grey, strikethrough = false })
 
   vim.api.nvim_set_hl(0, "CueCategorySpec",  { fg = COLORS.pink,     bold = false })
   vim.api.nvim_set_hl(0, "CueCategoryPlan",  { fg = COLORS.purple,   bold = false })

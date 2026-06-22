@@ -1,16 +1,16 @@
 local M = {}
 
+-- Status values considered "done" per cue framework vocabulary.
+-- Framework statuses: open, closed, in-progress, complete.
 M.DONE_STATUSES = {
-  done = true,
-  complete = true,
   closed = true,
+  complete = true,
 }
 
 M.TYPE_DEFAULTS = {
   task = { status = "open", priority = "normal" },
   todo = { status = "open", priority = "normal" },
   plan = { status = "open", priority = "normal" },
-  doc  = { status = "open" },
 }
 
 M.category_highlights = {
