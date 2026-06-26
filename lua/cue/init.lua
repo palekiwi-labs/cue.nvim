@@ -27,8 +27,8 @@ function M.open_context()
 end
 
 --- Open the current branch log file
-function M.open_log()
-  return require('cue.core').open_log()
+function M.open_log(branch)
+  return require('cue.core').open_log(branch)
 end
 
 --- Add a new artifact via `cue add`
