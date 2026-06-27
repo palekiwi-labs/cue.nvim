@@ -168,12 +168,13 @@ local function sort_artifacts(artifacts)
     task  = 0,
     plan  = 1,
     todo  = 2,
-    spec  = 3,
-    trace = 4,
-    doc   = 5,
-    bin   = 6,
-    tmp   = 7,
-    ref   = 8,
+    note  = 3,
+    spec  = 4,
+    trace = 5,
+    doc   = 6,
+    bin   = 7,
+    tmp   = 8,
+    ref   = 9,
   }
 
   table.sort(artifacts, function(a, b)
@@ -370,6 +371,7 @@ function M.ui_pick()
   local category_items = {
     { label = "task",  desc = "Task (on master)" },
     { label = "todo",  desc = "TODO (informal note)" },
+    { label = "note",  desc = "Note" },
     { label = "spec",  desc = "Specification" },
     { label = "plan",  desc = "Plan artifact" },
     { label = "doc",   desc = "Documentation artifact" },

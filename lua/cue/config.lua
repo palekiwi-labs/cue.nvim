@@ -11,6 +11,7 @@ M.TYPE_DEFAULTS = {
   task = { status = "open", priority = "normal" },
   todo = { status = "open", priority = "normal" },
   plan = { status = "open", priority = "normal" },
+  note = { status = "open" },
 }
 
 M.category_highlights = {
@@ -18,6 +19,7 @@ M.category_highlights = {
   plan  = "CueCategoryPlan",
   task  = "CueCategoryTask",
   todo  = "CueCategoryTodo",
+  note  = "CueCategoryNote",
   doc   = "CueCategoryDoc",
   bin   = "CueCategoryBin",
   trace = "CueCategoryTrace",

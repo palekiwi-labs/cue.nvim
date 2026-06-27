@@ -75,6 +75,7 @@ function M.setup()
     local items = {
       { label = "task",  desc = "Task artifact" },
       { label = "todo",  desc = "TODO artifact" },
+      { label = "note",  desc = "Note" },
       { label = "spec",  desc = "Specification" },
       { label = "plan",  desc = "Plan artifact" },
       { label = "doc",   desc = "Documentation artifact" },
