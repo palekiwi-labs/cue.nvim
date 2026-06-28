@@ -221,6 +221,29 @@ function M.add_with_title(type, branch)
   end)
 end
 
+--- Prompt for a file path, then add a root artifact of the given type.
+--- The typed path is the artifact's address (so subdirectories can be
+--- controlled); only the type's default frontmatter is applied (no title).
+---@param type string  artifact type (e.g. "note")
+---@param branch string|nil  override branch
+function M.add_with_path(type, branch)
+  local Snacks = require('snacks')
+  Snacks.input({
+    prompt = "Path (" .. type .. "):",
+    completion = "file",
+    win = { row = 0.3 },
+  }, function(path)
+    if not path or path == "" then return end
+    local defaults = config.TYPE_DEFAULTS[type] or {}
+    M.add(path, {
+      category    = type,
+      branch      = branch,
+      root        = true,
+      frontmatter = defaults,
+    })
+  end)
+end
+
 --- Prompt for a spec path, then add a root spec artifact
 ---@param branch string|nil
 function M.add_spec(branch)
