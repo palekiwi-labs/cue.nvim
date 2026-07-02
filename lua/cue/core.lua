@@ -155,8 +155,18 @@ function M.add(filename, opts)
 
   if opts.frontmatter then
     for k, v in pairs(opts.frontmatter) do
-      table.insert(cmd, '--frontmatter')
-      table.insert(cmd, string.format("%s=%s", k, v))
+      if type(v) == "table" then
+        -- Array value: emit one --frontmatter flag per element. A repeated
+        -- key becomes a YAML list in the output (see `cue add`). An empty
+        -- table yields no flags (no frontmatter value).
+        for _, el in ipairs(v) do
+          table.insert(cmd, '--frontmatter')
+          table.insert(cmd, string.format("%s=%s", k, el))
+        end
+      else
+        table.insert(cmd, '--frontmatter')
+        table.insert(cmd, string.format("%s=%s", k, v))
+      end
     end
   end
 
