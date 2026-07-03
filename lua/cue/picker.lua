@@ -362,8 +362,11 @@ function M.ui_pick()
 
   local branch_items = {
     { label = "Current Branch",   value = "current" },
-    { label = "Master Branch",    value = vim.g.git_master or "master" },
-    { label = "Base Branch",      value = vim.g.git_base   or "master" },
+    -- cue standardizes on a single base branch always named "master",
+    -- regardless of the repo's real git default branch (main, etc.).
+    -- Do NOT resolve via vim.g.git_master / git_base: agents and other
+    -- cue CLI environments would not agree on a detected name.
+    { label = "Master Branch",    value = "master" },
     { label = "All Branches",     value = "all" },
     { label = "Select Branch...", value = "pick" },
   }
