@@ -29,7 +29,7 @@ end
 function M.slugify(text)
   if not text then return nil end
   return text:lower()
-    :gsub("[%s_]+", "-")
+    :gsub("[%s_/]+", "-")
     :gsub("[^%w%-]+", "")
     :gsub("%-+", "-")
     :gsub("^%-+", "")
