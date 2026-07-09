@@ -5,7 +5,9 @@
   "permission": {
     "bash": {
       "luacheck *": "allow",
-      "lua *": "allow"
+      "lua *": "allow",
+      "luajit *": "allow",
+      "stylua *": "allow"
     }
   },
   "agent": {

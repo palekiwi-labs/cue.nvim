@@ -29,7 +29,7 @@ end
 function M.slugify(text)
   if not text then return nil end
   return text:lower()
-    :gsub("[%s_]+", "-")
+    :gsub("[%s_/]+", "-")
     :gsub("[^%w%-]+", "")
     :gsub("%-+", "-")
     :gsub("^%-+", "")
@@ -155,8 +155,18 @@ function M.add(filename, opts)
 
   if opts.frontmatter then
     for k, v in pairs(opts.frontmatter) do
-      table.insert(cmd, '--frontmatter')
-      table.insert(cmd, string.format("%s=%s", k, v))
+      if type(v) == "table" then
+        -- Array value: emit one --frontmatter flag per element. A repeated
+        -- key becomes a YAML list in the output (see `cue add`). An empty
+        -- table yields no flags (no frontmatter value).
+        for _, el in ipairs(v) do
+          table.insert(cmd, '--frontmatter')
+          table.insert(cmd, string.format("%s=%s", k, el))
+        end
+      else
+        table.insert(cmd, '--frontmatter')
+        table.insert(cmd, string.format("%s=%s", k, v))
+      end
     end
   end
 
@@ -217,6 +227,29 @@ function M.add_with_title(type, branch)
       category    = type,
       branch      = target_branch,
       frontmatter = frontmatter,
+    })
+  end)
+end
+
+--- Prompt for a file path, then add a root artifact of the given type.
+--- The typed path is the artifact's address (so subdirectories can be
+--- controlled); only the type's default frontmatter is applied (no title).
+---@param type string  artifact type (e.g. "note")
+---@param branch string|nil  override branch
+function M.add_with_path(type, branch)
+  local Snacks = require('snacks')
+  Snacks.input({
+    prompt = "Path (" .. type .. "):",
+    completion = "file",
+    win = { row = 0.3 },
+  }, function(path)
+    if not path or path == "" then return end
+    local defaults = config.TYPE_DEFAULTS[type] or {}
+    M.add(path, {
+      category    = type,
+      branch      = branch,
+      root        = true,
+      frontmatter = defaults,
     })
   end)
 end

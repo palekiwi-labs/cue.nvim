@@ -85,7 +85,7 @@ local function make_mem_entry_maker(opts)
     separator = " ",
     items = {
       { width = 5 },        -- category badge
-      { width = 50 },       -- filename / title
+      { width = 60 },       -- filename / title
       { width = 10 },       -- hash
       { remaining = true }, -- branch
     },
@@ -103,7 +103,7 @@ local function make_mem_entry_maker(opts)
     if entry.frontmatter and entry.frontmatter ~= vim.NIL then
       local fm = entry.frontmatter
       if fm.title and fm.title ~= vim.NIL and fm.title ~= "" then
-        display_name = fm.title .. " (" .. display_name .. ")"
+        display_name = fm.title
       end
       if core.is_done(entry) then
         highlight = "CueStatusDone"
@@ -362,8 +362,11 @@ function M.ui_pick()
 
   local branch_items = {
     { label = "Current Branch",   value = "current" },
-    { label = "Master Branch",    value = vim.g.git_master or "master" },
-    { label = "Base Branch",      value = vim.g.git_base   or "master" },
+    -- cue standardizes on a single base branch always named "master",
+    -- regardless of the repo's real git default branch (main, etc.).
+    -- Do NOT resolve via vim.g.git_master / git_base: agents and other
+    -- cue CLI environments would not agree on a detected name.
+    { label = "Master Branch",    value = "master" },
     { label = "All Branches",     value = "all" },
     { label = "Select Branch...", value = "pick" },
   }

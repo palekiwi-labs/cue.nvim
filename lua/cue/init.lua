@@ -45,6 +45,13 @@ function M.add_with_title(type, branch)
   return require('cue.core').add_with_title(type, branch)
 end
 
+--- Prompt for a file path, then add a root artifact of the given type
+---@param type string
+---@param branch string|nil
+function M.add_with_path(type, branch)
+  return require('cue.core').add_with_path(type, branch)
+end
+
 --- Prompt for a spec path, then add a root spec artifact
 ---@param branch string|nil
 function M.add_spec(branch)
