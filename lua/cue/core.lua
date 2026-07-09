@@ -115,7 +115,7 @@ function M.open_log(branch)
     return
   end
 
-  local path = ".cue/" .. branch .. "/spec/log.md"
+  local path = ".cue/" .. branch .. "/log.md"
   if vim.fn.filereadable(path) == 0 then
     vim.notify("Error: Log file does not exist: " .. path, vim.log.levels.ERROR)
     return
