@@ -36,27 +36,25 @@ function M.slugify(text)
     :gsub("%-+$", "")
 end
 
---- Execute a shell command and return stdout
----@param cmd string
+--- Execute a command (as an arg list) and return its stdout.
+--- Uses vim.system, the idiomatic API on nvim 0.10+. stderr is captured but
+--- discarded; a non-zero exit code yields (nil, error).
+---@param cmd table  command as a list of arguments (no shell involved)
 ---@return string|nil, string|nil
 function M.execute_command(cmd)
-  local handle = io.popen(cmd)
-  if not handle then
-    return nil, "Failed to execute command"
-  end
-  local result = handle:read("*a")
-  local success = handle:close()
-  if not success then
+  local obj = vim.system(cmd, { text = true }):wait()
+  if obj.code ~= 0 then
     return nil, "Command failed"
   end
-  return result
+  return obj.stdout
 end
 
---- Parse a JSON string via vim's json_decode
+--- Parse a JSON string using the native Lua JSON decoder (vim.json).
+--- Preferred over the legacy `vim.fn.json_decode` wrapper on nvim 0.10+.
 ---@param json_str string
 ---@return any, string|nil
 function M.parse_json(json_str)
-  local ok, result = pcall(vim.fn.json_decode, json_str)
+  local ok, result = pcall(vim.json.decode, json_str)
   if not ok then
     return nil, "Failed to parse JSON"
   end
@@ -66,24 +64,25 @@ end
 --- Get the current git branch name (with / replaced by -)
 ---@return string|nil
 function M.get_current_branch()
-  local result = vim.fn.system('git rev-parse --abbrev-ref HEAD 2>/dev/null')
-  if vim.v.shell_error == 0 then
-    local branch = result:gsub("%s+", "")
-    return branch:gsub("/", "-")
+  local obj = vim.system({ 'git', 'rev-parse', '--abbrev-ref', 'HEAD' }, { text = true }):wait()
+  if obj.code ~= 0 then
+    return nil
   end
-  return nil
+  local branch = (obj.stdout or ""):gsub("%s+", "")
+  if branch == "" then return nil end
+  return branch:gsub("/", "-")
 end
 
 -- ─── Public API ───────────────────────────────────────────────────────────────
 
 --- Open the current cue context file in the editor
 function M.open_context()
-  local cmd = "cue context path 2>/dev/null"
+  local cmd = { 'cue', 'context', 'path' }
   local output = M.execute_command(cmd)
 
   if not output or output == "" then
     vim.notify("Context not found, initializing...", vim.log.levels.INFO)
-    local init_output, init_err = M.execute_command("cue context init 2>/dev/null")
+    local init_output, init_err = M.execute_command({ 'cue', 'context', 'init' })
     if not init_output then
       vim.notify("Error initializing context: " .. (init_err or "unknown"), vim.log.levels.ERROR)
       return

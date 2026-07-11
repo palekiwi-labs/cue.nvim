@@ -21,26 +21,28 @@ local utils         = require('telescope.utils')
 local function get_cue_artifacts(opts)
   opts = opts or {}
 
-  vim.fn.system('which cue 2>/dev/null')
-  if vim.v.shell_error ~= 0 then
+  -- Verify `cue` is on PATH without spawning a shell. cue --version exits 0.
+  local probe = vim.system({ 'cue', '--version' }, { text = true }):wait()
+  if probe.code ~= 0 then
     vim.notify("Error: 'cue' command not found. Please ensure it's installed and in your PATH.", vim.log.levels.ERROR)
     return nil
   end
 
-  local cmd = 'cue list --json --frontmatter'
+  local cmd = { 'cue', 'list', '--json', '--frontmatter' }
   if opts.all then
-    cmd = cmd .. ' --all'
+    table.insert(cmd, '--all')
   end
   if opts.branch then
-    cmd = cmd .. ' --branch ' .. vim.fn.shellescape(opts.branch)
+    table.insert(cmd, '--branch')
+    table.insert(cmd, opts.branch)
   end
   if opts.type then
-    cmd = cmd .. ' --type ' .. vim.fn.shellescape(opts.type)
+    table.insert(cmd, '--type')
+    table.insert(cmd, opts.type)
   end
   if not opts.all then
-    cmd = cmd .. ' --include-gitignored'
+    table.insert(cmd, '--include-gitignored')
   end
-  cmd = cmd .. ' 2>/dev/null'
 
   local output, err = core.execute_command(cmd)
   if not output or output == "" then
@@ -73,6 +75,24 @@ end
 ---@return string
 local function get_category_highlight(category)
   return config.category_highlights[category] or "TelescopeResultsNormal"
+end
+
+--- List branch directories under .cue/ (excluding stray files like tags/.gitignore).
+--- Uses vim.fs.dir, the idiomatic API on nvim 0.8+, instead of a shell `ls -d` glob.
+---@return table|nil  sorted list of branch names, or nil if .cue/ is absent
+local function list_branches()
+  local cue_dir = ".cue"
+  if vim.fn.isdirectory(cue_dir) == 0 then
+    return nil
+  end
+  local branches = {}
+  for name, type in vim.fs.dir(cue_dir) do
+    if type == "directory" then
+      table.insert(branches, name)
+    end
+  end
+  table.sort(branches)
+  return branches
 end
 
 --- Custom Telescope entry maker for cue artifacts
@@ -315,7 +335,7 @@ end
 
 --- Open a Telescope picker for all cue context files
 function M.pick_context()
-  local output, err = core.execute_command("cue context path --all 2>/dev/null")
+  local output, err = core.execute_command({ 'cue', 'context', 'path', '--all' })
 
   if not output or output == "" then
     vim.notify("Error: " .. (err or "No context files found"), vim.log.levels.ERROR)
@@ -410,17 +430,8 @@ function M.ui_pick()
     }, function(choice)
       if not choice then return end
       if choice.value == "pick" then
-        local cue_dir = ".cue"
-        local branches = {}
-        local p = io.popen('ls -d ' .. cue_dir .. '/*/ 2>/dev/null')
-        if p then
-          for line in p:lines() do
-            local branch = line:match(".cue/(.+)/")
-            if branch then table.insert(branches, branch) end
-          end
-          p:close()
-        end
-        if #branches == 0 then
+        local branches = list_branches()
+        if not branches or #branches == 0 then
           vim.notify("No branches with artifacts found", vim.log.levels.INFO)
           return
         end
@@ -444,22 +455,10 @@ end
 
 --- Open a branch selector, then show artifacts for the chosen branch
 function M.pick_branch_artifacts()
-  local cue_dir = ".cue"
-  if vim.fn.isdirectory(cue_dir) == 0 then
+  local branches = list_branches()
+  if not branches then
     vim.notify("Error: .cue directory not found", vim.log.levels.ERROR)
     return
-  end
-
-  local branches = {}
-  local p = io.popen('ls -d ' .. cue_dir .. '/*/ 2>/dev/null')
-  if p then
-    for line in p:lines() do
-      local branch = line:match(".cue/(.+)/")
-      if branch then
-        table.insert(branches, branch)
-      end
-    end
-    p:close()
   end
 
   if #branches == 0 then
@@ -478,20 +477,10 @@ end
 --- Open a branch selector, then open that branch's log file.
 --- Symmetric to pick_context() and pick_branch_artifacts().
 function M.pick_logs()
-  local cue_dir = ".cue"
-  if vim.fn.isdirectory(cue_dir) == 0 then
+  local branches = list_branches()
+  if not branches then
     vim.notify("Error: .cue directory not found", vim.log.levels.ERROR)
     return
-  end
-
-  local branches = {}
-  local p = io.popen('ls -d ' .. cue_dir .. '/*/ 2>/dev/null')
-  if p then
-    for line in p:lines() do
-      local branch = line:match(".cue/(.+)/")
-      if branch then table.insert(branches, branch) end
-    end
-    p:close()
   end
 
   if #branches == 0 then

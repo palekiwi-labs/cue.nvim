@@ -5,7 +5,7 @@ commands for working with cue artifacts.
 
 ## Requirements
 
-- Neovim (LuaJIT)
+- Neovim 0.10+ (LuaJIT; targets 0.12)
 - `cue` CLI on `$PATH`
 - [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim)
 - [snacks.nvim](https://github.com/folke/snacks.nvim)
