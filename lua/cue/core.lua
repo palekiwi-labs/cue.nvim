@@ -225,6 +225,7 @@ function M.add_with_title(type, branch)
     M.add(filename, {
       category    = type,
       branch      = target_branch,
+      root        = type == "task",
       frontmatter = frontmatter,
     })
   end)
