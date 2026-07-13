@@ -26,9 +26,10 @@ function M.open_context()
   return require('cue.core').open_context()
 end
 
---- Open the current branch log file
-function M.open_log(branch)
-  return require('cue.core').open_log(branch)
+--- Open the active task context log file
+---@param task string|nil  task slug (nil = active context)
+function M.open_log(task)
+  return require('cue.core').open_log(task)
 end
 
 --- Add a new artifact via `cue add`
@@ -40,22 +41,22 @@ end
 
 --- Prompt for title, then add an artifact of the given type
 ---@param type string
----@param branch string|nil
-function M.add_with_title(type, branch)
-  return require('cue.core').add_with_title(type, branch)
+---@param task string|nil  task context (nil = active)
+function M.add_with_title(type, task)
+  return require('cue.core').add_with_title(type, task)
 end
 
 --- Prompt for a file path, then add a root artifact of the given type
 ---@param type string
----@param branch string|nil
-function M.add_with_path(type, branch)
-  return require('cue.core').add_with_path(type, branch)
+---@param task string|nil  task context (nil = active)
+function M.add_with_path(type, task)
+  return require('cue.core').add_with_path(type, task)
 end
 
 --- Prompt for a spec path, then add a root spec artifact
----@param branch string|nil
-function M.add_spec(branch)
-  return require('cue.core').add_spec(branch)
+---@param task string|nil  task context (nil = active)
+function M.add_spec(task)
+  return require('cue.core').add_spec(task)
 end
 
 -- ─── Re-export picker functions ───────────────────────────────────────────────

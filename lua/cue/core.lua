@@ -73,6 +73,23 @@ function M.get_current_branch()
   return branch:gsub("/", "-")
 end
 
+--- Get the active task context (resolved from `.cue/HEAD` via `cue status`).
+--- This replaces the git branch as the cue scope. `get_current_branch()` is
+--- kept above only for git operations (diffview, gitsigns, etc.).
+---@return table  { context = "master", global = true } or
+---                { context = "<slug>", global = false, title = "...", status = "..." }
+function M.get_active_task()
+  local output = M.execute_command({ 'cue', 'status', '--json' })
+  if not output or output == "" then
+    return { context = "master", global = true }
+  end
+  local ok, result = pcall(vim.json.decode, output)
+  if not ok or type(result) ~= "table" or not result.context then
+    return { context = "master", global = true }
+  end
+  return result
+end
+
 -- ─── Public API ───────────────────────────────────────────────────────────────
 
 --- Open the current cue context file in the editor
@@ -104,17 +121,18 @@ function M.open_context()
   vim.cmd.edit(path)
 end
 
---- Open the branch's log file and jump to the end.
---- Default branch is the current git branch; pass a branch name to override.
----@param branch string|nil  branch name (nil = current)
-function M.open_log(branch)
-  branch = branch or M.get_current_branch()
-  if not branch then
-    vim.notify("Error: Could not determine git branch", vim.log.levels.ERROR)
+--- Open the task context's log file and jump to the end.
+--- Default is the active task context (from `cue status`); pass a task slug
+--- (e.g. "master") to override.
+---@param task string|nil  task slug (nil = active context)
+function M.open_log(task)
+  task = task or M.get_active_task().context
+  if not task or task == "" then
+    vim.notify("Error: Could not determine active task context", vim.log.levels.ERROR)
     return
   end
 
-  local path = ".cue/" .. branch .. "/log.md"
+  local path = ".cue/" .. task .. "/log.md"
   if vim.fn.filereadable(path) == 0 then
     vim.notify("Error: Log file does not exist: " .. path, vim.log.levels.ERROR)
     return
@@ -147,9 +165,9 @@ function M.add(filename, opts)
     table.insert(cmd, '--root')
   end
 
-  if opts.branch then
-    table.insert(cmd, '--branch')
-    table.insert(cmd, opts.branch)
+  if opts.task then
+    table.insert(cmd, '--task')
+    table.insert(cmd, opts.task)
   end
 
   if opts.frontmatter then
@@ -203,8 +221,8 @@ end
 
 --- Prompt for a title, then add an artifact of the given type
 ---@param type string  artifact type (e.g. "task", "todo", "plan", "doc")
----@param branch string|nil  override branch
-function M.add_with_title(type, branch)
+---@param task string|nil  override task context (nil = active context)
+function M.add_with_title(type, task)
   local Snacks = require('snacks')
   Snacks.input({
     prompt = "Title (" .. type .. "):",
@@ -212,10 +230,10 @@ function M.add_with_title(type, branch)
   }, function(title)
     if not title or title == "" then return end
 
-    -- Tasks are special: they ALWAYS live on the master branch
-    local target_branch = branch
+    -- Tasks are special: they ALWAYS live in the master context
+    local target_task = task
     if type == "task" then
-      target_branch = "master"
+      target_task = "master"
     end
 
     local filename = M.slugify(title) .. ".md"
@@ -224,7 +242,7 @@ function M.add_with_title(type, branch)
 
     M.add(filename, {
       category    = type,
-      branch      = target_branch,
+      task        = target_task,
       root        = type == "task",
       frontmatter = frontmatter,
     })
@@ -235,8 +253,8 @@ end
 --- The typed path is the artifact's address (so subdirectories can be
 --- controlled); only the type's default frontmatter is applied (no title).
 ---@param type string  artifact type (e.g. "note")
----@param branch string|nil  override branch
-function M.add_with_path(type, branch)
+---@param task string|nil  override task context (nil = active context)
+function M.add_with_path(type, task)
   local Snacks = require('snacks')
   Snacks.input({
     prompt = "Path (" .. type .. "):",
@@ -247,7 +265,7 @@ function M.add_with_path(type, branch)
     local defaults = config.TYPE_DEFAULTS[type] or {}
     M.add(path, {
       category    = type,
-      branch      = branch,
+      task        = task,
       root        = true,
       frontmatter = defaults,
     })
@@ -255,8 +273,8 @@ function M.add_with_path(type, branch)
 end
 
 --- Prompt for a spec path, then add a root spec artifact
----@param branch string|nil
-function M.add_spec(branch)
+---@param task string|nil  override task context (nil = active context)
+function M.add_spec(task)
   local Snacks = require('snacks')
   Snacks.input({
     prompt = "Spec path:",
@@ -264,7 +282,7 @@ function M.add_spec(branch)
     win = { row = 0.3 },
   }, function(path)
     if not path or path == "" then return end
-    M.add(path, { category = "spec", branch = branch, root = true })
+    M.add(path, { category = "spec", task = task, root = true })
   end)
 end
 
