@@ -325,12 +325,14 @@ function M.pick_artifacts(opts)
 
   local prompt_title = "Cue Artifacts"
   if opts.all then
-    prompt_title = prompt_title .. " (All)"
+    prompt_title = prompt_title .. " (all)"
+  elseif opts.task then
+    -- Explicit scope (drill-in, master binding, etc.) — show the slug.
+    prompt_title = prompt_title .. " (" .. opts.task .. ")"
   else
-    local task = opts.task or active_task
-    if task then
-      prompt_title = prompt_title .. " (" .. task .. ")"
-    end
+    -- No explicit scope: picker follows HEAD. Label as "current" so the
+    -- title is distinct from a picker explicitly scoped to the active task.
+    prompt_title = prompt_title .. " (current)"
   end
   if opts.type then
     prompt_title = prompt_title .. " [" .. opts.type:upper() .. "]"
