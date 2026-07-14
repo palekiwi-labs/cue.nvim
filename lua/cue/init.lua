@@ -39,6 +39,11 @@ function M.add(filename, opts)
   return require('cue.core').add(filename, opts)
 end
 
+--- Prompt for a task slug, create the task card on master
+function M.add_task()
+  return require('cue.core').add_task()
+end
+
 --- Prompt for title, then add an artifact of the given type
 ---@param type string
 ---@param task string|nil  task context (nil = active)
