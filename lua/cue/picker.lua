@@ -341,6 +341,33 @@ function M.pick_artifacts(opts)
         copy_to_clipboard(prompt_bufnr, function(e) return e.hash end, "hash")
       end)
 
+      -- Switch active task context to the selected entry's context (<C-s>).
+      -- entry.branch holds the task context slug (cue list --json wire field).
+      map({ 'i', 'n' }, '<C-s>', function()
+        local entry = action_state.get_selected_entry()
+        if not entry then return end
+        local slug = entry.branch
+        if not slug or slug == "" then return end
+        local obj = vim.system({ 'cue', 'switch', slug }, { text = true }):wait()
+        if obj.code == 0 then
+          vim.notify("Switched to task: " .. slug, vim.log.levels.INFO)
+        else
+          local msg = vim.trim((obj.stderr or "") ~= "" and obj.stderr or (obj.stdout or "unknown"))
+          vim.notify("cue switch failed: " .. msg, vim.log.levels.ERROR)
+        end
+        actions.close(prompt_bufnr)
+      end)
+
+      -- Open artifacts for the selected entry's task context (<C-e>).
+      map({ 'i', 'n' }, '<C-e>', function()
+        local entry = action_state.get_selected_entry()
+        if not entry then return end
+        local slug = entry.branch
+        if not slug or slug == "" then return end
+        actions.close(prompt_bufnr)
+        M.pick_artifacts({ task = slug })
+      end)
+
       return true
     end,
   }):find()
