@@ -26,9 +26,10 @@ function M.open_context()
   return require('cue.core').open_context()
 end
 
---- Open the current branch log file
-function M.open_log(branch)
-  return require('cue.core').open_log(branch)
+--- Open the active task context log file
+---@param task string|nil  task slug (nil = active context)
+function M.open_log(task)
+  return require('cue.core').open_log(task)
 end
 
 --- Add a new artifact via `cue add`
@@ -38,24 +39,29 @@ function M.add(filename, opts)
   return require('cue.core').add(filename, opts)
 end
 
+--- Prompt for a task slug, create the task card on master
+function M.add_task()
+  return require('cue.core').add_task()
+end
+
 --- Prompt for title, then add an artifact of the given type
 ---@param type string
----@param branch string|nil
-function M.add_with_title(type, branch)
-  return require('cue.core').add_with_title(type, branch)
+---@param task string|nil  task context (nil = active)
+function M.add_with_title(type, task)
+  return require('cue.core').add_with_title(type, task)
 end
 
 --- Prompt for a file path, then add a root artifact of the given type
 ---@param type string
----@param branch string|nil
-function M.add_with_path(type, branch)
-  return require('cue.core').add_with_path(type, branch)
+---@param task string|nil  task context (nil = active)
+function M.add_with_path(type, task)
+  return require('cue.core').add_with_path(type, task)
 end
 
 --- Prompt for a spec path, then add a root spec artifact
----@param branch string|nil
-function M.add_spec(branch)
-  return require('cue.core').add_spec(branch)
+---@param task string|nil  task context (nil = active)
+function M.add_spec(task)
+  return require('cue.core').add_spec(task)
 end
 
 -- ─── Re-export picker functions ───────────────────────────────────────────────
@@ -71,17 +77,17 @@ function M.pick_context()
   return require('cue.picker').pick_context()
 end
 
---- Guided branch→type→artifact picker
+--- Guided task-context→type→artifact picker
 function M.ui_pick()
   return require('cue.picker').ui_pick()
 end
 
---- Open branch selector, then artifact picker
-function M.pick_branch_artifacts()
-  return require('cue.picker').pick_branch_artifacts()
+--- Open task-context selector, then show its artifacts
+function M.pick_task_context_artifacts()
+  return require('cue.picker').pick_task_context_artifacts()
 end
 
---- Open branch selector, then open that branch's log file
+--- Open task-context selector, then open that context's log file
 function M.pick_logs()
   return require('cue.picker').pick_logs()
 end

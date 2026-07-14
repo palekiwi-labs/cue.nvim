@@ -73,6 +73,90 @@ function M.get_current_branch()
   return branch:gsub("/", "-")
 end
 
+--- Get the active task context (resolved from `.cue/HEAD` via `cue status`).
+--- This replaces the git branch as the cue scope. `get_current_branch()` is
+--- kept above only for git operations (diffview, gitsigns, etc.).
+---@return table  { context = "master", global = true } or
+---                { context = "<slug>", global = false, title = "...", status = "..." }
+function M.get_active_task()
+  local output = M.execute_command({ 'cue', 'status', '--json' })
+  if not output or output == "" then
+    return { context = "master", global = true }
+  end
+  local ok, result = pcall(vim.json.decode, output)
+  if not ok or type(result) ~= "table" or not result.context then
+    return { context = "master", global = true }
+  end
+  return result
+end
+
+-- ─── Scope confirmation ───────────────────────────────────────────────────────
+
+--- Prompt the user to confirm (or change) the cue scope for a new artifact.
+---
+--- Short-circuits without a dialog in two cases:
+---   1. type == "task": tasks always live in master; callback("master") immediately.
+---   2. task ~= nil: the caller already pinned a scope (e.g. add_with_title("todo",
+---      "master")); callback(task) immediately (honours the explicit binding choice).
+---
+--- Otherwise shows a two-item Snacks select:
+---   • "current: <active-slug>"  →  callback(active_slug)
+---   • "select scope…"           →  opens a .cue/ subdirectory list, then callback(chosen)
+---
+---@param type string      artifact type ("task" bypasses the dialog)
+---@param task string|nil  pre-set scope override, or nil to prompt
+---@param callback function  called with the resolved task slug (string)
+function M.confirm_scope(type, task, callback)
+  if type == "task" then
+    callback("master")
+    return
+  end
+
+  if task ~= nil then
+    callback(task)
+    return
+  end
+
+  local Snacks = require('snacks')
+  local active = M.get_active_task().context
+
+  local items = {
+    { label = "current: " .. active, value = active      },
+    { label = "select scope...",     value = "__pick__"  },
+  }
+
+  Snacks.picker.select(items, {
+    prompt = "Scope for new artifact:",
+    format_item = function(item) return item.label end,
+  }, function(choice)
+    if not choice then return end
+    if choice.value ~= "__pick__" then
+      callback(choice.value)
+      return
+    end
+    -- Enumerate .cue/ subdirectories (mirrors list_task_contexts in picker.lua).
+    local cue_dir = ".cue"
+    if vim.fn.isdirectory(cue_dir) == 0 then
+      vim.notify("No .cue directory found", vim.log.levels.ERROR)
+      return
+    end
+    local contexts = {}
+    for name, kind in vim.fs.dir(cue_dir) do
+      if kind == "directory" then
+        table.insert(contexts, name)
+      end
+    end
+    table.sort(contexts)
+    if #contexts == 0 then
+      vim.notify("No task contexts found", vim.log.levels.INFO)
+      return
+    end
+    Snacks.picker.select(contexts, { prompt = "Select scope:" }, function(ctx)
+      if ctx then callback(ctx) end
+    end)
+  end)
+end
+
 -- ─── Public API ───────────────────────────────────────────────────────────────
 
 --- Open the current cue context file in the editor
@@ -104,17 +188,18 @@ function M.open_context()
   vim.cmd.edit(path)
 end
 
---- Open the branch's log file and jump to the end.
---- Default branch is the current git branch; pass a branch name to override.
----@param branch string|nil  branch name (nil = current)
-function M.open_log(branch)
-  branch = branch or M.get_current_branch()
-  if not branch then
-    vim.notify("Error: Could not determine git branch", vim.log.levels.ERROR)
+--- Open the task context's log file and jump to the end.
+--- Default is the active task context (from `cue status`); pass a task slug
+--- (e.g. "master") to override.
+---@param task string|nil  task slug (nil = active context)
+function M.open_log(task)
+  task = task or M.get_active_task().context
+  if not task or task == "" then
+    vim.notify("Error: Could not determine active task context", vim.log.levels.ERROR)
     return
   end
 
-  local path = ".cue/" .. branch .. "/log.md"
+  local path = ".cue/" .. task .. "/log.md"
   if vim.fn.filereadable(path) == 0 then
     vim.notify("Error: Log file does not exist: " .. path, vim.log.levels.ERROR)
     return
@@ -147,9 +232,9 @@ function M.add(filename, opts)
     table.insert(cmd, '--root')
   end
 
-  if opts.branch then
-    table.insert(cmd, '--branch')
-    table.insert(cmd, opts.branch)
+  if opts.task then
+    table.insert(cmd, '--task')
+    table.insert(cmd, opts.task)
   end
 
   if opts.frontmatter then
@@ -201,41 +286,63 @@ function M.add(filename, opts)
   return filepath
 end
 
---- Prompt for a title, then add an artifact of the given type
+--- Prompt for a task slug, then create the task card on master.
+--- Tasks always live in .cue/master/task/; no scope dialog is shown.
+--- The slug is used as the filename stem (e.g. "my-feature" → "my-feature.md").
+function M.add_task()
+  local Snacks = require('snacks')
+  Snacks.input({
+    prompt = "Task slug (e.g. my-feature):",
+    win = { row = 0.3 },
+  }, function(slug)
+    if not slug or slug == "" then return end
+    -- Normalise: lowercase, spaces/underscores → hyphens, strip non-slug chars.
+    slug = M.slugify(slug)
+    if not slug or slug == "" then
+      vim.notify("Error: slug is empty after normalisation", vim.log.levels.ERROR)
+      return
+    end
+    local filename = slug .. ".md"
+    local defaults = config.TYPE_DEFAULTS["task"] or {}
+    M.add(filename, {
+      category    = "task",
+      task        = "master",
+      root        = true,
+      frontmatter = defaults,
+    })
+  end)
+end
+
+--- Prompt for a title, then confirm scope, then add an artifact of the given type.
+--- When task is non-nil the scope dialog is skipped (caller already pinned scope).
 ---@param type string  artifact type (e.g. "task", "todo", "plan", "doc")
----@param branch string|nil  override branch
-function M.add_with_title(type, branch)
+---@param task string|nil  override task context (nil = prompt via confirm_scope)
+function M.add_with_title(type, task)
   local Snacks = require('snacks')
   Snacks.input({
     prompt = "Title (" .. type .. "):",
     win = { row = 0.3 },
   }, function(title)
     if not title or title == "" then return end
-
-    -- Tasks are special: they ALWAYS live on the master branch
-    local target_branch = branch
-    if type == "task" then
-      target_branch = "master"
-    end
-
-    local filename = M.slugify(title) .. ".md"
-    local defaults = config.TYPE_DEFAULTS[type] or {}
-    local frontmatter = vim.tbl_extend("force", { title = title }, defaults)
-
-    M.add(filename, {
-      category    = type,
-      branch      = target_branch,
-      frontmatter = frontmatter,
-    })
+    M.confirm_scope(type, task, function(target_task)
+      local filename = M.slugify(title) .. ".md"
+      local defaults = config.TYPE_DEFAULTS[type] or {}
+      local frontmatter = vim.tbl_extend("force", { title = title }, defaults)
+      M.add(filename, {
+        category    = type,
+        task        = target_task,
+        root        = type == "task",
+        frontmatter = frontmatter,
+      })
+    end)
   end)
 end
 
---- Prompt for a file path, then add a root artifact of the given type.
---- The typed path is the artifact's address (so subdirectories can be
---- controlled); only the type's default frontmatter is applied (no title).
+--- Prompt for a file path, then confirm scope, then add a root artifact of the given type.
+--- When task is non-nil the scope dialog is skipped (caller already pinned scope).
 ---@param type string  artifact type (e.g. "note")
----@param branch string|nil  override branch
-function M.add_with_path(type, branch)
+---@param task string|nil  override task context (nil = prompt via confirm_scope)
+function M.add_with_path(type, task)
   local Snacks = require('snacks')
   Snacks.input({
     prompt = "Path (" .. type .. "):",
@@ -243,19 +350,22 @@ function M.add_with_path(type, branch)
     win = { row = 0.3 },
   }, function(path)
     if not path or path == "" then return end
-    local defaults = config.TYPE_DEFAULTS[type] or {}
-    M.add(path, {
-      category    = type,
-      branch      = branch,
-      root        = true,
-      frontmatter = defaults,
-    })
+    M.confirm_scope(type, task, function(target_task)
+      local defaults = config.TYPE_DEFAULTS[type] or {}
+      M.add(path, {
+        category    = type,
+        task        = target_task,
+        root        = true,
+        frontmatter = defaults,
+      })
+    end)
   end)
 end
 
---- Prompt for a spec path, then add a root spec artifact
----@param branch string|nil
-function M.add_spec(branch)
+--- Prompt for a spec path, then confirm scope, then add a root spec artifact.
+--- When task is non-nil the scope dialog is skipped (caller already pinned scope).
+---@param task string|nil  override task context (nil = prompt via confirm_scope)
+function M.add_spec(task)
   local Snacks = require('snacks')
   Snacks.input({
     prompt = "Spec path:",
@@ -263,7 +373,9 @@ function M.add_spec(branch)
     win = { row = 0.3 },
   }, function(path)
     if not path or path == "" then return end
-    M.add(path, { category = "spec", branch = branch, root = true })
+    M.confirm_scope("spec", task, function(target_task)
+      M.add(path, { category = "spec", task = target_task, root = true })
+    end)
   end)
 end
 
