@@ -32,6 +32,13 @@ function M.open_log(task)
   return require('cue.core').open_log(task)
 end
 
+--- Open the active task card (the .cue/master/task/<slug>.md for the active
+--- context). Notifies and does nothing when the global (master) context is
+--- active.
+function M.open_active_task()
+  return require('cue.core').open_active_task()
+end
+
 --- Add a new artifact via `cue add`
 ---@param filename string
 ---@param opts table|nil

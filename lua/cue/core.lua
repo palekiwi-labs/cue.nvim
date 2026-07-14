@@ -90,6 +90,50 @@ function M.get_active_task()
   return result
 end
 
+--- Pure decision helper for open_active_task().
+---
+--- Given the status object returned by get_active_task() (which wraps
+--- `cue status --json`), decide what to do with the active context:
+---   { action = "open",    path = ".cue/master/task/<slug>.md" }
+---   { action = "notify",  message = "..." }
+---
+--- The global (master) context has no single associated task, so it resolves
+--- to a notify decision. A missing/nil status is treated the same way.
+--- Kept free of side effects so it can be unit-tested without Neovim.
+---@param status table|nil  { context, global, ... } from get_active_task()
+---@return table
+function M.resolve_active_task_path(status)
+  if not status or not status.context or status.context == "" then
+    return { action = "notify", message = "No active task context found" }
+  end
+  -- The global context (master) has no associated task card.
+  if status.global or status.context == "master" then
+    return { action = "notify", message = "No active task: global context (master) is active" }
+  end
+  return { action = "open", path = ".cue/master/task/" .. status.context .. ".md" }
+end
+
+--- Open the active task card in a new buffer.
+---
+--- Resolves the active context via `cue status --json`. When a task slug is
+--- active, opens `.cue/master/task/<slug>.md`. When the global (master)
+--- context is active (or the task file is missing), notifies the user and
+--- does nothing.
+function M.open_active_task()
+  local decision = M.resolve_active_task_path(M.get_active_task())
+  if decision.action == "notify" then
+    vim.notify(decision.message, vim.log.levels.WARN)
+    return
+  end
+
+  if vim.fn.filereadable(decision.path) == 0 then
+    vim.notify("Error: task file does not exist: " .. decision.path, vim.log.levels.ERROR)
+    return
+  end
+
+  vim.cmd.edit(decision.path)
+end
+
 --- Switch the active cue context to the given task slug.
 --- Calls `cue switch <slug>` and notifies the user of the result.
 ---@param slug string  task slug or "master"
