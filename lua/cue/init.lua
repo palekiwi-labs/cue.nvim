@@ -72,17 +72,17 @@ function M.pick_context()
   return require('cue.picker').pick_context()
 end
 
---- Guided branch→type→artifact picker
+--- Guided task-context→type→artifact picker
 function M.ui_pick()
   return require('cue.picker').ui_pick()
 end
 
---- Open branch selector, then artifact picker
-function M.pick_branch_artifacts()
-  return require('cue.picker').pick_branch_artifacts()
+--- Open task-context selector, then show its artifacts
+function M.pick_task_context_artifacts()
+  return require('cue.picker').pick_task_context_artifacts()
 end
 
---- Open branch selector, then open that branch's log file
+--- Open task-context selector, then open that context's log file
 function M.pick_logs()
   return require('cue.picker').pick_logs()
 end

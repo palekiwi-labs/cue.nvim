@@ -32,9 +32,9 @@ local function get_cue_artifacts(opts)
   if opts.all then
     table.insert(cmd, '--all')
   end
-  if opts.branch then
-    table.insert(cmd, '--branch')
-    table.insert(cmd, opts.branch)
+  if opts.task then
+    table.insert(cmd, '--task')
+    table.insert(cmd, opts.task)
   end
   if opts.type then
     table.insert(cmd, '--type')
@@ -77,22 +77,23 @@ local function get_category_highlight(category)
   return config.category_highlights[category] or "TelescopeResultsNormal"
 end
 
---- List branch directories under .cue/ (excluding stray files like tags/.gitignore).
---- Uses vim.fs.dir, the idiomatic API on nvim 0.8+, instead of a shell `ls -d` glob.
----@return table|nil  sorted list of branch names, or nil if .cue/ is absent
-local function list_branches()
+--- List task-context directories under .cue/ (excluding stray files like
+--- tags/.gitignore). Uses vim.fs.dir, the idiomatic API on nvim 0.8+.
+--- Returns a sorted list of task context slugs (including "master").
+---@return table|nil  sorted list of context slugs, or nil if .cue/ is absent
+local function list_task_contexts()
   local cue_dir = ".cue"
   if vim.fn.isdirectory(cue_dir) == 0 then
     return nil
   end
-  local branches = {}
-  for name, type in vim.fs.dir(cue_dir) do
-    if type == "directory" then
-      table.insert(branches, name)
+  local contexts = {}
+  for name, kind in vim.fs.dir(cue_dir) do
+    if kind == "directory" then
+      table.insert(contexts, name)
     end
   end
-  table.sort(branches)
-  return branches
+  table.sort(contexts)
+  return contexts
 end
 
 --- Custom Telescope entry maker for cue artifacts
@@ -178,11 +179,11 @@ local function make_mem_entry_maker(opts)
   end
 end
 
---- Sort artifacts: active first, current branch first, then by category, then by recency
+--- Sort artifacts: active first, active task context first, then by category, then by recency
 ---@param artifacts table
 ---@return table
 local function sort_artifacts(artifacts)
-  local current_branch = core.get_current_branch()
+  local active_task = core.get_active_task().context
 
   local category_priority = {
     task  = 0,
@@ -204,8 +205,8 @@ local function sort_artifacts(artifacts)
       return not a_finished
     end
 
-    local a_is_current = a.branch == current_branch
-    local b_is_current = b.branch == current_branch
+    local a_is_current = a.branch == active_task
+    local b_is_current = b.branch == active_task
     if a_is_current ~= b_is_current then
       return a_is_current
     end
@@ -277,7 +278,7 @@ end
 -- ─── Pickers ──────────────────────────────────────────────────────────────────
 
 --- Open a Telescope picker for cue artifacts
----@param opts table|nil  supports: all, branch, type
+---@param opts table|nil  supports: all, task, type
 function M.pick_artifacts(opts)
   opts = opts or {}
 
@@ -288,11 +289,11 @@ function M.pick_artifacts(opts)
 
   local prompt_title = "Cue Artifacts"
   if opts.all then
-    prompt_title = prompt_title .. " (All Branches)"
+    prompt_title = prompt_title .. " (All)"
   else
-    local branch = opts.branch or core.get_current_branch()
-    if branch then
-      prompt_title = prompt_title .. " (" .. branch .. ")"
+    local task = opts.task or core.get_active_task().context
+    if task then
+      prompt_title = prompt_title .. " (" .. task .. ")"
     end
   end
   if opts.type then
@@ -376,19 +377,15 @@ function M.pick_context()
   }):find()
 end
 
---- Guided branch selector → artifact type selector → artifact picker
+--- Guided task-context selector → artifact type selector → artifact picker
 function M.ui_pick()
   local Snacks = require('snacks')
 
-  local branch_items = {
-    { label = "Current Branch",   value = "current" },
-    -- cue standardizes on a single base branch always named "master",
-    -- regardless of the repo's real git default branch (main, etc.).
-    -- Do NOT resolve via vim.g.git_master / git_base: agents and other
-    -- cue CLI environments would not agree on a detected name.
-    { label = "Master Branch",    value = "master" },
-    { label = "All Branches",     value = "all" },
-    { label = "Select Branch...", value = "pick" },
+  local task_items = {
+    { label = "Current Task",    value = "current" },
+    { label = "Master",          value = "master" },
+    { label = "All",             value = "all" },
+    { label = "Select Task...",  value = "pick" },
   }
 
   local category_items = {
@@ -404,7 +401,7 @@ function M.ui_pick()
     { label = "ref",   desc = "Reference artifact" },
   }
 
-  local function pick_with_branch(branch)
+  local function pick_with_task(task)
     Snacks.picker.select(category_items, {
       prompt = "Select artifact type:",
       format_item = function(item)
@@ -413,30 +410,30 @@ function M.ui_pick()
     }, function(choice)
       if not choice then return end
       local pick_opts = {}
-      if branch == "all" then
+      if task == "all" then
         pick_opts.all = true
       else
-        pick_opts.branch = branch
+        pick_opts.task = task
       end
       pick_opts.type = choice.label
       M.pick_artifacts(pick_opts)
     end)
   end
 
-  local function select_branch(callback)
-    Snacks.picker.select(branch_items, {
-      prompt = "Select Branch Scope:",
+  local function select_task(callback)
+    Snacks.picker.select(task_items, {
+      prompt = "Select Task Scope:",
       format_item = function(item) return item.label end,
     }, function(choice)
       if not choice then return end
       if choice.value == "pick" then
-        local branches = list_branches()
-        if not branches or #branches == 0 then
-          vim.notify("No branches with artifacts found", vim.log.levels.INFO)
+        local contexts = list_task_contexts()
+        if not contexts or #contexts == 0 then
+          vim.notify("No task contexts with artifacts found", vim.log.levels.INFO)
           return
         end
-        Snacks.picker.select(branches, { prompt = "Select Branch:" }, function(branch)
-          if branch then callback(branch) end
+        Snacks.picker.select(contexts, { prompt = "Select Task:" }, function(ctx)
+          if ctx then callback(ctx) end
         end)
       elseif choice.value == "current" then
         callback(nil)
@@ -448,49 +445,49 @@ function M.ui_pick()
     end)
   end
 
-  select_branch(function(branch)
-    pick_with_branch(branch)
+  select_task(function(task)
+    pick_with_task(task)
   end)
 end
 
---- Open a branch selector, then show artifacts for the chosen branch
-function M.pick_branch_artifacts()
-  local branches = list_branches()
-  if not branches then
+--- Open a task-context selector, then show artifacts for the chosen context
+function M.pick_task_context_artifacts()
+  local contexts = list_task_contexts()
+  if not contexts then
     vim.notify("Error: .cue directory not found", vim.log.levels.ERROR)
     return
   end
 
-  if #branches == 0 then
-    vim.notify("No branches with artifacts found", vim.log.levels.INFO)
+  if #contexts == 0 then
+    vim.notify("No task contexts with artifacts found", vim.log.levels.INFO)
     return
   end
 
   local Snacks = require('snacks')
-  Snacks.picker.select(branches, { prompt = "Select Branch:" }, function(branch)
-    if branch then
-      M.pick_artifacts({ branch = branch })
+  Snacks.picker.select(contexts, { prompt = "Select Task Context:" }, function(ctx)
+    if ctx then
+      M.pick_artifacts({ task = ctx })
     end
   end)
 end
 
---- Open a branch selector, then open that branch's log file.
---- Symmetric to pick_context() and pick_branch_artifacts().
+--- Open a task-context selector, then open that context's log file.
+--- Symmetric to pick_context() and pick_task_context_artifacts().
 function M.pick_logs()
-  local branches = list_branches()
-  if not branches then
+  local contexts = list_task_contexts()
+  if not contexts then
     vim.notify("Error: .cue directory not found", vim.log.levels.ERROR)
     return
   end
 
-  if #branches == 0 then
-    vim.notify("No branches found", vim.log.levels.INFO)
+  if #contexts == 0 then
+    vim.notify("No task contexts found", vim.log.levels.INFO)
     return
   end
 
   local Snacks = require('snacks')
-  Snacks.picker.select(branches, { prompt = "Select Branch (log):" }, function(branch)
-    if branch then require('cue.core').open_log(branch) end
+  Snacks.picker.select(contexts, { prompt = "Select Task (log):" }, function(ctx)
+    if ctx then require('cue.core').open_log(ctx) end
   end)
 end
 
