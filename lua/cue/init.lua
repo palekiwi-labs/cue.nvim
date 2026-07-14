@@ -39,6 +39,12 @@ function M.add(filename, opts)
   return require('cue.core').add(filename, opts)
 end
 
+--- Switch the active cue context to the given task slug
+---@param slug string  task slug or "master"
+function M.switch_context(slug)
+  return require('cue.core').switch_context(slug)
+end
+
 --- Prompt for a task slug, create the task card on master
 function M.add_task()
   return require('cue.core').add_task()

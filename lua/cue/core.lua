@@ -90,6 +90,19 @@ function M.get_active_task()
   return result
 end
 
+--- Switch the active cue context to the given task slug.
+--- Calls `cue switch <slug>` and notifies the user of the result.
+---@param slug string  task slug or "master"
+function M.switch_context(slug)
+  local obj = vim.system({ 'cue', 'switch', slug }, { text = true }):wait()
+  if obj.code == 0 then
+    vim.notify("cue: switched to " .. slug, vim.log.levels.INFO)
+  else
+    local msg = vim.trim((obj.stderr or "") ~= "" and obj.stderr or (obj.stdout or "unknown"))
+    vim.notify("cue switch failed: " .. msg, vim.log.levels.ERROR)
+  end
+end
+
 -- ─── Scope confirmation ───────────────────────────────────────────────────────
 
 --- Prompt the user to confirm (or change) the cue scope for a new artifact.
