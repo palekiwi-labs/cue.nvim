@@ -110,7 +110,14 @@ function M.setup()
   local function run_wizard()
     select_category(function(category)
       prompt_filename(category, function(filename)
-        prompt_root_and_add(filename, { category = category == "spec" and nil or category })
+        -- confirm_scope short-circuits for tasks (always master) and shows
+        -- the two-item scope dialog for everything else.
+        core.confirm_scope(category, nil, function(task)
+          prompt_root_and_add(filename, {
+            category = category == "spec" and nil or category,
+            task     = task,
+          })
+        end)
       end)
     end)
   end

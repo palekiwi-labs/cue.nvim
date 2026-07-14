@@ -90,6 +90,73 @@ function M.get_active_task()
   return result
 end
 
+-- ─── Scope confirmation ───────────────────────────────────────────────────────
+
+--- Prompt the user to confirm (or change) the cue scope for a new artifact.
+---
+--- Short-circuits without a dialog in two cases:
+---   1. type == "task": tasks always live in master; callback("master") immediately.
+---   2. task ~= nil: the caller already pinned a scope (e.g. add_with_title("todo",
+---      "master")); callback(task) immediately (honours the explicit binding choice).
+---
+--- Otherwise shows a two-item Snacks select:
+---   • "current: <active-slug>"  →  callback(active_slug)
+---   • "select scope…"           →  opens a .cue/ subdirectory list, then callback(chosen)
+---
+---@param type string      artifact type ("task" bypasses the dialog)
+---@param task string|nil  pre-set scope override, or nil to prompt
+---@param callback function  called with the resolved task slug (string)
+function M.confirm_scope(type, task, callback)
+  if type == "task" then
+    callback("master")
+    return
+  end
+
+  if task ~= nil then
+    callback(task)
+    return
+  end
+
+  local Snacks = require('snacks')
+  local active = M.get_active_task().context
+
+  local items = {
+    { label = "current: " .. active, value = active      },
+    { label = "select scope...",     value = "__pick__"  },
+  }
+
+  Snacks.picker.select(items, {
+    prompt = "Scope for new artifact:",
+    format_item = function(item) return item.label end,
+  }, function(choice)
+    if not choice then return end
+    if choice.value ~= "__pick__" then
+      callback(choice.value)
+      return
+    end
+    -- Enumerate .cue/ subdirectories (mirrors list_task_contexts in picker.lua).
+    local cue_dir = ".cue"
+    if vim.fn.isdirectory(cue_dir) == 0 then
+      vim.notify("No .cue directory found", vim.log.levels.ERROR)
+      return
+    end
+    local contexts = {}
+    for name, kind in vim.fs.dir(cue_dir) do
+      if kind == "directory" then
+        table.insert(contexts, name)
+      end
+    end
+    table.sort(contexts)
+    if #contexts == 0 then
+      vim.notify("No task contexts found", vim.log.levels.INFO)
+      return
+    end
+    Snacks.picker.select(contexts, { prompt = "Select scope:" }, function(ctx)
+      if ctx then callback(ctx) end
+    end)
+  end)
+end
+
 -- ─── Public API ───────────────────────────────────────────────────────────────
 
 --- Open the current cue context file in the editor
@@ -219,9 +286,10 @@ function M.add(filename, opts)
   return filepath
 end
 
---- Prompt for a title, then add an artifact of the given type
+--- Prompt for a title, then confirm scope, then add an artifact of the given type.
+--- When task is non-nil the scope dialog is skipped (caller already pinned scope).
 ---@param type string  artifact type (e.g. "task", "todo", "plan", "doc")
----@param task string|nil  override task context (nil = active context)
+---@param task string|nil  override task context (nil = prompt via confirm_scope)
 function M.add_with_title(type, task)
   local Snacks = require('snacks')
   Snacks.input({
@@ -229,31 +297,24 @@ function M.add_with_title(type, task)
     win = { row = 0.3 },
   }, function(title)
     if not title or title == "" then return end
-
-    -- Tasks are special: they ALWAYS live in the master context
-    local target_task = task
-    if type == "task" then
-      target_task = "master"
-    end
-
-    local filename = M.slugify(title) .. ".md"
-    local defaults = config.TYPE_DEFAULTS[type] or {}
-    local frontmatter = vim.tbl_extend("force", { title = title }, defaults)
-
-    M.add(filename, {
-      category    = type,
-      task        = target_task,
-      root        = type == "task",
-      frontmatter = frontmatter,
-    })
+    M.confirm_scope(type, task, function(target_task)
+      local filename = M.slugify(title) .. ".md"
+      local defaults = config.TYPE_DEFAULTS[type] or {}
+      local frontmatter = vim.tbl_extend("force", { title = title }, defaults)
+      M.add(filename, {
+        category    = type,
+        task        = target_task,
+        root        = type == "task",
+        frontmatter = frontmatter,
+      })
+    end)
   end)
 end
 
---- Prompt for a file path, then add a root artifact of the given type.
---- The typed path is the artifact's address (so subdirectories can be
---- controlled); only the type's default frontmatter is applied (no title).
+--- Prompt for a file path, then confirm scope, then add a root artifact of the given type.
+--- When task is non-nil the scope dialog is skipped (caller already pinned scope).
 ---@param type string  artifact type (e.g. "note")
----@param task string|nil  override task context (nil = active context)
+---@param task string|nil  override task context (nil = prompt via confirm_scope)
 function M.add_with_path(type, task)
   local Snacks = require('snacks')
   Snacks.input({
@@ -262,18 +323,21 @@ function M.add_with_path(type, task)
     win = { row = 0.3 },
   }, function(path)
     if not path or path == "" then return end
-    local defaults = config.TYPE_DEFAULTS[type] or {}
-    M.add(path, {
-      category    = type,
-      task        = task,
-      root        = true,
-      frontmatter = defaults,
-    })
+    M.confirm_scope(type, task, function(target_task)
+      local defaults = config.TYPE_DEFAULTS[type] or {}
+      M.add(path, {
+        category    = type,
+        task        = target_task,
+        root        = true,
+        frontmatter = defaults,
+      })
+    end)
   end)
 end
 
---- Prompt for a spec path, then add a root spec artifact
----@param task string|nil  override task context (nil = active context)
+--- Prompt for a spec path, then confirm scope, then add a root spec artifact.
+--- When task is non-nil the scope dialog is skipped (caller already pinned scope).
+---@param task string|nil  override task context (nil = prompt via confirm_scope)
 function M.add_spec(task)
   local Snacks = require('snacks')
   Snacks.input({
@@ -282,7 +346,9 @@ function M.add_spec(task)
     win = { row = 0.3 },
   }, function(path)
     if not path or path == "" then return end
-    M.add(path, { category = "spec", task = task, root = true })
+    M.confirm_scope("spec", task, function(target_task)
+      M.add(path, { category = "spec", task = target_task, root = true })
+    end)
   end)
 end
 
