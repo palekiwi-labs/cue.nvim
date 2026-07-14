@@ -389,10 +389,11 @@ function M.pick_artifacts(opts)
         actions.close(prompt_bufnr)
       end)
 
-      -- Open artifacts for the selected entry's task context (<C-g>).
+      -- Open artifacts for the selected entry's task context (<C-e>).
       -- Same slug resolution as <C-s>: use filename stem for task-type pickers.
-      -- (<C-e> is reserved by Telescope insert mode and the global oldfiles binding.)
-      map({ 'i', 'n' }, '<C-g>', function()
+      -- vim.schedule defers the new picker open until Telescope has fully torn
+      -- down the current one; without it the picker silently does nothing.
+      map({ 'i', 'n' }, '<C-e>', function()
         local entry = action_state.get_selected_entry()
         if not entry then return end
         local slug
@@ -403,7 +404,9 @@ function M.pick_artifacts(opts)
         end
         if not slug or slug == "" then return end
         actions.close(prompt_bufnr)
-        M.pick_artifacts({ task = slug })
+        vim.schedule(function()
+          M.pick_artifacts({ task = slug })
+        end)
       end)
 
       return true
