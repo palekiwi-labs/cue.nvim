@@ -97,22 +97,29 @@ local function list_task_contexts()
 end
 
 --- Custom Telescope entry maker for cue artifacts
----@param opts table|nil
+---@param opts table|nil  may include active_task (string) for the marker column
 ---@return function
 local function make_mem_entry_maker(opts)
   opts = opts or {}
 
+  -- active_task is fetched once by pick_artifacts and passed via opts so that
+  -- all entries share a single cue status call (not one per row).
+  local active_task = opts.active_task
+
   local displayer = entry_display.create {
     separator = " ",
     items = {
+      { width = 1 },        -- active-task marker ("*" or " ")
       { width = 5 },        -- category badge
       { width = 60 },       -- filename / title
       { width = 10 },       -- hash
-      { remaining = true }, -- branch
+      { remaining = true }, -- task context slug (entry.branch = JSON wire field)
     },
   }
 
   local make_display = function(entry)
+    local marker = (active_task and entry.branch == active_task) and "*" or " "
+
     local hash_display = ""
     if entry.hash and entry.hash ~= vim.NIL then
       hash_display = entry.hash
@@ -132,10 +139,11 @@ local function make_mem_entry_maker(opts)
     end
 
     return displayer {
-      { format_category(entry.category), get_category_highlight(entry.category) },
-      { display_name,                    highlight },
-      { hash_display,                    "TelescopeResultsComment" },
-      { entry.branch,                    "TelescopeResultsComment" },
+      { marker,                              "TelescopeResultsComment" },
+      { format_category(entry.category),     get_category_highlight(entry.category) },
+      { display_name,                        highlight },
+      { hash_display,                        "TelescopeResultsComment" },
+      { entry.branch,                        "TelescopeResultsComment" },
     }
   end
 
@@ -282,6 +290,10 @@ end
 function M.pick_artifacts(opts)
   opts = opts or {}
 
+  -- Fetch active task once; used for prompt title and the marker column.
+  local active_task = core.get_active_task().context
+  opts.active_task = active_task
+
   local artifacts = get_cue_artifacts(opts)
   if not artifacts or #artifacts == 0 then return end
 
@@ -291,7 +303,7 @@ function M.pick_artifacts(opts)
   if opts.all then
     prompt_title = prompt_title .. " (All)"
   else
-    local task = opts.task or core.get_active_task().context
+    local task = opts.task or active_task
     if task then
       prompt_title = prompt_title .. " (" .. task .. ")"
     end
