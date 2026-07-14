@@ -389,9 +389,10 @@ function M.pick_artifacts(opts)
         actions.close(prompt_bufnr)
       end)
 
-      -- Open artifacts for the selected entry's task context (<C-e>).
+      -- Open artifacts for the selected entry's task context (<C-g>).
       -- Same slug resolution as <C-s>: use filename stem for task-type pickers.
-      map({ 'i', 'n' }, '<C-e>', function()
+      -- (<C-e> is reserved by Telescope insert mode and the global oldfiles binding.)
+      map({ 'i', 'n' }, '<C-g>', function()
         local entry = action_state.get_selected_entry()
         if not entry then return end
         local slug
