@@ -97,7 +97,7 @@ local function list_task_contexts()
 end
 
 --- Custom Telescope entry maker for cue artifacts
----@param opts table|nil  may include active_task (string) for the marker column
+---@param opts table|nil  supports: active_task (string), show_marker (bool)
 ---@return function
 local function make_mem_entry_maker(opts)
   opts = opts or {}
@@ -105,21 +105,34 @@ local function make_mem_entry_maker(opts)
   -- active_task is fetched once by pick_artifacts and passed via opts so that
   -- all entries share a single cue status call (not one per row).
   local active_task = opts.active_task
+  -- show_marker is true only for task-type pickers (pick_artifacts sets it).
+  local show_marker = opts.show_marker
 
-  local displayer = entry_display.create {
-    separator = " ",
-    items = {
-      { width = 1 },        -- active-task marker ("*" or " ")
-      { width = 5 },        -- category badge
-      { width = 60 },       -- filename / title
-      { width = 10 },       -- hash
-      { remaining = true }, -- task context slug (entry.branch = JSON wire field)
-    },
-  }
+  local displayer
+  if show_marker then
+    displayer = entry_display.create {
+      separator = " ",
+      items = {
+        { width = 1 },        -- active-task marker ("*" or " ")
+        { width = 5 },        -- category badge
+        { width = 60 },       -- filename / title
+        { width = 10 },       -- hash
+        { remaining = true }, -- task context slug (entry.branch = JSON wire field)
+      },
+    }
+  else
+    displayer = entry_display.create {
+      separator = " ",
+      items = {
+        { width = 5 },        -- category badge
+        { width = 60 },       -- filename / title
+        { width = 10 },       -- hash
+        { remaining = true }, -- task context slug (entry.branch = JSON wire field)
+      },
+    }
+  end
 
   local make_display = function(entry)
-    local marker = (active_task and entry.branch == active_task) and "*" or " "
-
     local hash_display = ""
     if entry.hash and entry.hash ~= vim.NIL then
       hash_display = entry.hash
@@ -138,13 +151,21 @@ local function make_mem_entry_maker(opts)
       end
     end
 
-    return displayer {
-      { marker,                              "TelescopeResultsComment" },
-      { format_category(entry.category),     get_category_highlight(entry.category) },
-      { display_name,                        highlight },
-      { hash_display,                        "TelescopeResultsComment" },
-      { entry.branch,                        "TelescopeResultsComment" },
-    }
+    local cols = {}
+    if show_marker then
+      -- Task cards live in .cue/master/task/<slug>.md; entry.branch is always
+      -- "master" for all of them. Compare the filename stem (the task slug)
+      -- against active_task instead.
+      local slug = vim.fn.fnamemodify(entry.name, ":r")
+      local marker = (active_task and slug == active_task) and "*" or " "
+      table.insert(cols, { marker, "TelescopeResultsComment" })
+    end
+    table.insert(cols, { format_category(entry.category),    get_category_highlight(entry.category) })
+    table.insert(cols, { display_name,                       highlight })
+    table.insert(cols, { hash_display,                       "TelescopeResultsComment" })
+    table.insert(cols, { entry.branch,                       "TelescopeResultsComment" })
+
+    return displayer(cols)
   end
 
   return function(entry)
@@ -293,6 +314,9 @@ function M.pick_artifacts(opts)
   -- Fetch active task once; used for prompt title and the marker column.
   local active_task = core.get_active_task().context
   opts.active_task = active_task
+  -- Marker column is shown only for task-type pickers (compares filename stem
+  -- to active_task). All other pickers omit the column to save space.
+  opts.show_marker = (opts.type == "task")
 
   local artifacts = get_cue_artifacts(opts)
   if not artifacts or #artifacts == 0 then return end
