@@ -366,11 +366,18 @@ function M.pick_artifacts(opts)
       end)
 
       -- Switch active task context to the selected entry's context (<C-s>).
-      -- entry.branch holds the task context slug (cue list --json wire field).
+      -- For task-type pickers the slug is the filename stem (entry.branch is
+      -- always "master" for task cards). For all other pickers entry.branch
+      -- holds the context slug directly.
       map({ 'i', 'n' }, '<C-s>', function()
         local entry = action_state.get_selected_entry()
         if not entry then return end
-        local slug = entry.branch
+        local slug
+        if opts.type == "task" then
+          slug = vim.fn.fnamemodify(entry.name, ":r")
+        else
+          slug = entry.branch
+        end
         if not slug or slug == "" then return end
         local obj = vim.system({ 'cue', 'switch', slug }, { text = true }):wait()
         if obj.code == 0 then
@@ -383,10 +390,16 @@ function M.pick_artifacts(opts)
       end)
 
       -- Open artifacts for the selected entry's task context (<C-e>).
+      -- Same slug resolution as <C-s>: use filename stem for task-type pickers.
       map({ 'i', 'n' }, '<C-e>', function()
         local entry = action_state.get_selected_entry()
         if not entry then return end
-        local slug = entry.branch
+        local slug
+        if opts.type == "task" then
+          slug = vim.fn.fnamemodify(entry.name, ":r")
+        else
+          slug = entry.branch
+        end
         if not slug or slug == "" then return end
         actions.close(prompt_bufnr)
         M.pick_artifacts({ task = slug })
