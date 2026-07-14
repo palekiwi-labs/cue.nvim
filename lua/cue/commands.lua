@@ -3,9 +3,9 @@ local M = {}
 
 --- Generic arg parser shared by :CuePick and :CueAdd.
 --- Tokens are whitespace-separated. Three shapes:
----   "todo"          -> positional
----   "root" / "all"  -> flag (must be in KNOWN_FLAGS)
----   "branch=master" -> kwargs (value is everything after first =)
+---   "todo"         -> positional
+---   "root" / "all" -> flag (must be in KNOWN_FLAGS)
+---   "task=master"  -> kwargs (value is everything after first =)
 --- No quote handling; values with spaces will break. Acceptable for prototype.
 local KNOWN_FLAGS = { root = true, force = true, all = true }
 
@@ -27,12 +27,12 @@ local function parse_args(args)
 end
 
 --- Build opts table for core.add() from parsed args.
---- Known kwargs (branch, commit) become opts fields;
+--- Known kwarg (task) becomes an opts field;
 --- remaining kwargs become frontmatter key=value pairs.
 local function build_add_opts(category, parsed)
   local frontmatter = nil
   for k, v in pairs(parsed.kwargs) do
-    if k ~= "branch" and k ~= "commit" then
+    if k ~= "task" then
       frontmatter = frontmatter or {}
       frontmatter[k] = v
     end
@@ -41,8 +41,7 @@ local function build_add_opts(category, parsed)
     category    = category == "spec" and nil or category,
     root        = parsed.flags.root and true or nil,
     force       = parsed.flags.force and true or nil,
-    branch      = parsed.kwargs.branch,
-    commit      = parsed.kwargs.commit,
+    task        = parsed.kwargs.task,
     frontmatter = frontmatter,
   }
 end
@@ -55,10 +54,10 @@ function M.setup()
     local Snacks = require('snacks')
     local root_items = {
       { label = "No",  root = false, desc = "Save as pinned artifact (timestamped, default)" },
-      { label = "Yes", root = true,  desc = "Save in branch-specific directory" },
+      { label = "Yes", root = true,  desc = "Save at task context root" },
     }
     Snacks.picker.select(root_items, {
-      prompt = "Save in branch root?",
+      prompt = "Save at context root?",
       format_item = function(item)
         return string.format("%-3s  %s", item.label, item.desc)
       end,
@@ -120,7 +119,7 @@ function M.setup()
   -- Examples:
   --   :CuePick
   --   :CuePick todo
-  --   :CuePick todo branch=master
+  --   :CuePick todo task=master
   --   :CuePick todo all
   vim.api.nvim_create_user_command('CuePick', function(args)
     local parsed = parse_args(args.args)
@@ -131,14 +130,14 @@ function M.setup()
     picker.pick_artifacts(opts)
   end, {
     nargs = "*",
-    desc  = "Open cue artifact picker (e.g. :CuePick todo branch=master all)",
+    desc  = "Open cue artifact picker (e.g. :CuePick todo task=master all)",
   })
 
   -- :CueAdd [type] [filename] [key=value ...] [root] [force]
   -- No args           -> full wizard (type, filename, root status prompts)
   -- Type only         -> prompt filename, no root prompt (pinned by default)
   -- Type + filename   -> no prompts unless root flag forces root placement
-  -- Extra key=value   -> branch/commit become opts, rest become frontmatter
+  -- Extra key=value   -> task becomes an opt, rest become frontmatter
   vim.api.nvim_create_user_command('CueAdd', function(args)
     local parsed = parse_args(args.args)
     if #parsed.positional == 0 then return run_wizard() end
@@ -153,18 +152,18 @@ function M.setup()
     end
   end, {
     nargs = "*",
-    desc  = "Add a cue artifact (no args = wizard; e.g. :CueAdd todo weekly.md root branch=master)",
+    desc  = "Add a cue artifact (no args = wizard; e.g. :CueAdd todo weekly.md root task=master)",
   })
 
-  -- :CueLog [branch]
-  -- No arg  -> open current branch log
-  -- <branch> -> open that branch's log
+  -- :CueLog [task]
+  -- No arg   -> open active task context log
+  -- <slug>   -> open that task context's log (e.g. :CueLog master)
   vim.api.nvim_create_user_command('CueLog', function(args)
-    local branch = vim.trim(args.args or "")
-    core.open_log(branch ~= "" and branch or nil)
+    local task = vim.trim(args.args or "")
+    core.open_log(task ~= "" and task or nil)
   end, {
     nargs = "?",
-    desc  = "Open cue log file (optional branch override)",
+    desc  = "Open cue log file (optional task slug override, e.g. :CueLog master)",
   })
 
   -- :CueContext
