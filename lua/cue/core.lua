@@ -23,6 +23,28 @@ function M.is_finished(artifact)
   return M.is_done(artifact)
 end
 
+--- Marker character for a task card, used by the task-picker marker column
+--- and the marker-based sort. Returns a single character:
+---   "*" = active task (overrides every other marker)
+---   "!" = in-progress
+---   " " = otherwise
+---
+--- Kept pure (no vim.* calls) so it is unit-testable without Neovim.
+---@param slug string         task slug (filename stem of the task card)
+---@param status string|nil   frontmatter status (e.g. "in-progress")
+---@param active_slug string|nil  the active task slug, or nil for global
+---@return string  marker character
+function M.task_marker_for(slug, status, active_slug)
+  if active_slug and slug == active_slug then
+    return "*"
+  end
+  if status and type(status) == "string"
+     and status:lower() == "in-progress" then
+    return "!"
+  end
+  return " "
+end
+
 --- Slugify text for use as a filename
 ---@param text string|nil
 ---@return string|nil
