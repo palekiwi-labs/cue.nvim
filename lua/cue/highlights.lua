@@ -17,6 +17,10 @@ local COLORS = {
 function M.setup()
   vim.api.nvim_set_hl(0, "CueStatusDone", { fg = COLORS.grey, strikethrough = true })
 
+  -- Width-1 task-picker markers. Bold so the symbol reads at a glance.
+  vim.api.nvim_set_hl(0, "CueMarkerActive", { fg = COLORS.cyan, bold = true })
+  vim.api.nvim_set_hl(0, "CueMarkerInProgress", { fg = COLORS.yellow, bold = true })
+
   vim.api.nvim_set_hl(0, "CueCategorySpec", { fg = COLORS.pink, bold = false })
   vim.api.nvim_set_hl(0, "CueCategoryPlan", { fg = COLORS.purple, bold = false })
   vim.api.nvim_set_hl(0, "CueCategoryTask", { fg = COLORS.cyan, bold = false })

@@ -31,6 +31,7 @@ commands for working with cue artifacts.
 | `:CueAdd [type] [file] [key=value ...]` | Add artifact (no args = wizard; `root`, `force`, `branch=X`, etc.) |
 | `:CueLog [branch]` | Open branch log file (default: current branch) |
 | `:CueContext` | Open current context file |
+| `:CueActiveTask` | Open the active task card (notifies when on global/master context) |
 
 All commands are thin wrappers over `require('cue').*` functions; bind those
 directly for keybinding-driven workflows.

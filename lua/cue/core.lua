@@ -23,6 +23,28 @@ function M.is_finished(artifact)
   return M.is_done(artifact)
 end
 
+--- Marker character for a task card, used by the task-picker marker column
+--- and the marker-based sort. Returns a single character:
+---   "*" = active task (overrides every other marker)
+---   "!" = in-progress
+---   " " = otherwise
+---
+--- Kept pure (no vim.* calls) so it is unit-testable without Neovim.
+---@param slug string         task slug (filename stem of the task card)
+---@param status string|nil   frontmatter status (e.g. "in-progress")
+---@param active_slug string|nil  the active task slug, or nil for global
+---@return string  marker character
+function M.task_marker_for(slug, status, active_slug)
+  if active_slug and slug == active_slug then
+    return "*"
+  end
+  if status and type(status) == "string"
+     and status:lower() == "in-progress" then
+    return "!"
+  end
+  return " "
+end
+
 --- Slugify text for use as a filename
 ---@param text string|nil
 ---@return string|nil
@@ -88,6 +110,63 @@ function M.get_active_task()
     return { context = "master", global = true }
   end
   return result
+end
+
+--- Pure decision helper for open_active_task().
+---
+--- Given the status object returned by get_active_task() (which wraps
+--- `cue status --json`), decide what to do with the active context:
+---   { action = "open",    path = ".cue/master/task/<slug>.md" }
+---   { action = "notify",  message = "..." }
+---
+--- The global (master) context has no single associated task, so it resolves
+--- to a notify decision. A missing/nil status is treated the same way.
+--- Kept free of side effects so it can be unit-tested without Neovim.
+---@param status table|nil  { context, global, ... } from get_active_task()
+---@return table
+function M.resolve_active_task_path(status)
+  if not status or not status.context or status.context == "" then
+    return { action = "notify", message = "No active task context found" }
+  end
+  -- The global context (master) has no associated task card.
+  if status.global or status.context == "master" then
+    return { action = "notify", message = "No active task: global context (master) is active" }
+  end
+  return { action = "open", path = ".cue/master/task/" .. status.context .. ".md" }
+end
+
+--- Open the active task card in a new buffer.
+---
+--- Resolves the active context via `cue status --json`. When a task slug is
+--- active, opens `.cue/master/task/<slug>.md`. When the global (master)
+--- context is active (or the task file is missing), notifies the user and
+--- does nothing.
+function M.open_active_task()
+  local decision = M.resolve_active_task_path(M.get_active_task())
+  if decision.action == "notify" then
+    vim.notify(decision.message, vim.log.levels.WARN)
+    return
+  end
+
+  if vim.fn.filereadable(decision.path) == 0 then
+    vim.notify("Error: task file does not exist: " .. decision.path, vim.log.levels.ERROR)
+    return
+  end
+
+  vim.cmd.edit(decision.path)
+end
+
+--- Switch the active cue context to the given task slug.
+--- Calls `cue switch <slug>` and notifies the user of the result.
+---@param slug string  task slug or "master"
+function M.switch_context(slug)
+  local obj = vim.system({ 'cue', 'switch', slug }, { text = true }):wait()
+  if obj.code == 0 then
+    vim.notify("cue: switched to " .. slug, vim.log.levels.INFO)
+  else
+    local msg = vim.trim((obj.stderr or "") ~= "" and obj.stderr or (obj.stdout or "unknown"))
+    vim.notify("cue switch failed: " .. msg, vim.log.levels.ERROR)
+  end
 end
 
 -- ─── Scope confirmation ───────────────────────────────────────────────────────

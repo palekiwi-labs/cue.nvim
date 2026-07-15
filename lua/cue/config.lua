@@ -7,6 +7,16 @@ M.DONE_STATUSES = {
   complete = true,
 }
 
+-- Sort rank for the frontmatter `priority` field, used as the secondary
+-- sort key in the task picker (after the marker). Unknown/missing values
+-- sort last (callers map to 99).
+M.PRIORITY_RANK = {
+  critical = 0,
+  high     = 1,
+  normal   = 2,
+  low      = 3,
+}
+
 M.TYPE_DEFAULTS = {
   task = { status = "open", priority = "normal" },
   todo = { status = "open", priority = "normal" },

@@ -77,6 +77,52 @@ local function get_category_highlight(category)
   return config.category_highlights[category] or "TelescopeResultsNormal"
 end
 
+--- Numeric sort rank for a task marker: "*" (0) < "!" (1) < " " (2).
+---@param marker string
+---@return integer
+local function marker_rank(marker)
+  if marker == "*" then return 0 end
+  if marker == "!" then return 1 end
+  return 2
+end
+
+--- Numeric sort rank for an artifact's frontmatter priority.
+--- Unknown/missing priorities sort last (99), mirroring the defensive
+--- guarding in core.is_done.
+---@param artifact table
+---@return integer
+local function priority_rank(artifact)
+  if artifact.frontmatter and artifact.frontmatter ~= vim.NIL then
+    local p = artifact.frontmatter.priority
+    if p and p ~= vim.NIL then
+      return config.PRIORITY_RANK[p] or 99
+    end
+  end
+  return 99
+end
+
+--- Marker character for a task card. Resolves the slug from the entry's
+--- filename stem and delegates to core.task_marker_for, so display and
+--- sort share a single source of truth.
+---@param entry table
+---@param active_task string|nil
+---@return string marker, string highlight
+local function entry_marker(entry, active_task)
+  local slug = vim.fn.fnamemodify(entry.name, ":r")
+  local status = nil
+  if entry.frontmatter and entry.frontmatter ~= vim.NIL then
+    status = entry.frontmatter.status
+  end
+  local marker = core.task_marker_for(slug, status, active_task)
+  local hl = "TelescopeResultsComment"
+  if marker == "*" then
+    hl = "CueMarkerActive"
+  elseif marker == "!" then
+    hl = "CueMarkerInProgress"
+  end
+  return marker, hl
+end
+
 --- List task-context directories under .cue/ (excluding stray files like
 --- tags/.gitignore). Uses vim.fs.dir, the idiomatic API on nvim 0.8+.
 --- Returns a sorted list of task context slugs (including "master").
@@ -153,12 +199,11 @@ local function make_mem_entry_maker(opts)
 
     local cols = {}
     if show_marker then
-      -- Task cards live in .cue/master/task/<slug>.md; entry.branch is always
-      -- "master" for all of them. Compare the filename stem (the task slug)
-      -- against active_task instead.
-      local slug = vim.fn.fnamemodify(entry.name, ":r")
-      local marker = (active_task and slug == active_task) and "*" or " "
-      table.insert(cols, { marker, "TelescopeResultsComment" })
+      -- "*" = active task (overrides), "!" = in-progress, " " otherwise.
+      -- entry_marker is shared with sort_artifacts so the column and the
+      -- ordering never disagree.
+      local marker, marker_hl = entry_marker(entry, active_task)
+      table.insert(cols, { marker, marker_hl })
     end
     table.insert(cols, { format_category(entry.category),    get_category_highlight(entry.category) })
     table.insert(cols, { display_name,                       highlight })
@@ -208,11 +253,23 @@ local function make_mem_entry_maker(opts)
   end
 end
 
---- Sort artifacts: active first, active task context first, then by category, then by recency
+--- Sort artifacts.
+---
+--- For the task picker (opts.show_marker): primary key is the marker
+--- ("*" < "!" < blank) and secondary key is the frontmatter `priority`.
+--- This also fixes the latent bug where the active task card never floated
+--- to the top — the old `a.branch == active_task` check is a no-op for task
+--- cards because branch is always "master".
+---
+--- All pickers share the remaining tiebreakers: finished last, active
+--- context first, category, recency, then name.
 ---@param artifacts table
+---@param opts table|nil  supports: show_marker (bool, task picker only)
 ---@return table
-local function sort_artifacts(artifacts)
+local function sort_artifacts(artifacts, opts)
+  opts = opts or {}
   local active_task = core.get_active_task().context
+  local task_sort = opts.show_marker == true
 
   local category_priority = {
     task  = 0,
@@ -228,6 +285,23 @@ local function sort_artifacts(artifacts)
   }
 
   table.sort(artifacts, function(a, b)
+    -- Task picker: marker first ("*" < "!" < blank), then priority.
+    if task_sort then
+      local a_marker = entry_marker(a, active_task)
+      local b_marker = entry_marker(b, active_task)
+      local a_rank = marker_rank(a_marker)
+      local b_rank = marker_rank(b_marker)
+      if a_rank ~= b_rank then
+        return a_rank < b_rank
+      end
+
+      local a_pri = priority_rank(a)
+      local b_pri = priority_rank(b)
+      if a_pri ~= b_pri then
+        return a_pri < b_pri
+      end
+    end
+
     local a_finished = core.is_finished(a)
     local b_finished = core.is_finished(b)
     if a_finished ~= b_finished then
@@ -321,7 +395,7 @@ function M.pick_artifacts(opts)
   local artifacts = get_cue_artifacts(opts)
   if not artifacts or #artifacts == 0 then return end
 
-  artifacts = sort_artifacts(artifacts)
+  artifacts = sort_artifacts(artifacts, opts)
 
   local prompt_title = "Cue Artifacts"
   if opts.all then
@@ -410,6 +484,23 @@ function M.pick_artifacts(opts)
           M.pick_artifacts({ task = slug })
         end)
       end)
+
+      -- Open the selected task's log.md (<C-l>). Task-picker only — other
+      -- pickers have no status column. The slug is the filename stem;
+      -- core.open_log resolves .cue/<slug>/log.md, checks filereadable, and
+      -- notifies the user if the log does not exist yet.
+      if opts.type == "task" then
+        map({ 'i', 'n' }, '<C-l>', function()
+          local entry = action_state.get_selected_entry()
+          if not entry then return end
+          local slug = vim.fn.fnamemodify(entry.name, ":r")
+          if not slug or slug == "" then return end
+          actions.close(prompt_bufnr)
+          vim.schedule(function()
+            core.open_log(slug)
+          end)
+        end)
+      end
 
       return true
     end,

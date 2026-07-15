@@ -185,6 +185,16 @@ function M.setup()
     nargs = 0,
     desc  = "Open (or initialize) current cue context file",
   })
+
+  -- :CueActiveTask
+  -- Open the active task card in a new buffer. Notifies when the global
+  -- (master) context is active (no associated task).
+  vim.api.nvim_create_user_command('CueActiveTask', function()
+    core.open_active_task()
+  end, {
+    nargs = 0,
+    desc  = "Open the active task card",
+  })
 end
 
 return M
