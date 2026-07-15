@@ -45,6 +45,87 @@ function M.task_marker_for(slug, status, active_slug)
   return " "
 end
 
+-- Numeric sort rank for a marker: "*" (0) < "!" (1) < " " (2).
+local function marker_rank(marker)
+  if marker == "*" then return 0 end
+  if marker == "!" then return 1 end
+  return 2
+end
+
+-- Numeric sort rank for a frontmatter priority table. Unknown/missing
+-- values sort last (99).
+local function priority_rank(fm)
+  if fm and fm ~= vim.NIL then
+    local p = fm.priority
+    if p and p ~= vim.NIL then
+      return config.PRIORITY_RANK[p] or 99
+    end
+  end
+  return 99
+end
+
+--- Strip the file extension from an artifact name, yielding the task slug.
+--- Pure-Lua equivalent of vim.fn.fnamemodify(name, ":r").
+---@param name string|nil
+---@return string|nil
+function M.task_slug(name)
+  if not name then return nil end
+  return (name:gsub("%.[^.]+$", ""))
+end
+
+--- Pure comparator that orders two task cards for the task picker.
+--- Precedence (highest first):
+---   1. marker  -- "*" (active) < "!" (in-progress) < blank
+---   2. finished -- complete/closed sink to the bottom, BEFORE priority
+---   3. priority -- critical < high < normal < low
+---   4. recency  -- newer commit first
+---   5. name     -- lexical
+---
+--- The finished-before-priority rule is deliberate: a completed task must
+--- never outrank an open one no matter its priority.
+---@param a table        task artifact (has .name, .frontmatter, .commit_timestamp)
+---@param b table        task artifact
+---@param active_task string|nil  the active task slug
+---@return boolean  true when a should sort before b
+function M.task_less(a, b, active_task)
+  local a_slug = M.task_slug(a.name)
+  local b_slug = M.task_slug(b.name)
+  local a_fm, b_fm = a.frontmatter, b.frontmatter
+  local a_status = (a_fm and a_fm ~= vim.NIL) and a_fm.status or nil
+  local b_status = (b_fm and b_fm ~= vim.NIL) and b_fm.status or nil
+
+  -- 1. marker
+  local a_rank = marker_rank(M.task_marker_for(a_slug, a_status, active_task))
+  local b_rank = marker_rank(M.task_marker_for(b_slug, b_status, active_task))
+  if a_rank ~= b_rank then
+    return a_rank < b_rank
+  end
+
+  -- 2. finished sinks (must precede priority)
+  local a_fin = M.is_finished(a)
+  local b_fin = M.is_finished(b)
+  if a_fin ~= b_fin then
+    return not a_fin
+  end
+
+  -- 3. priority
+  local a_pri = priority_rank(a_fm)
+  local b_pri = priority_rank(b_fm)
+  if a_pri ~= b_pri then
+    return a_pri < b_pri
+  end
+
+  -- 4. recency (newer first)
+  local a_ts = a.commit_timestamp and a.commit_timestamp ~= vim.NIL and a.commit_timestamp or 0
+  local b_ts = b.commit_timestamp and b.commit_timestamp ~= vim.NIL and b.commit_timestamp or 0
+  if a_ts ~= b_ts then
+    return a_ts > b_ts
+  end
+
+  -- 5. name
+  return a.name < b.name
+end
+
 --- Slugify text for use as a filename
 ---@param text string|nil
 ---@return string|nil
