@@ -73,6 +73,29 @@ function M.task_slug(name)
   return (name:gsub("%.[^.]+$", ""))
 end
 
+--- Pure helper to compute a sorted list of scope slugs from task-card filenames.
+--- ALWAYS contains "master", deduped, and sorted.
+---@param task_filenames table|nil list of task-card basenames (e.g. { "auth-login.md" })
+---@return table sorted list of scope slugs
+function M.scope_set(task_filenames)
+  local slugs = { master = true }
+  if task_filenames then
+    for _, name in ipairs(task_filenames) do
+      local slug = M.task_slug(name)
+      if slug then
+        slugs[slug] = true
+      end
+    end
+  end
+
+  local result = {}
+  for slug, _ in pairs(slugs) do
+    table.insert(result, slug)
+  end
+  table.sort(result)
+  return result
+end
+
 --- Pure comparator that orders two task cards for the task picker.
 --- Precedence (highest first):
 ---   1. marker  -- "*" (active) < "!" (in-progress) < blank
@@ -294,25 +317,17 @@ function M.confirm_scope(type, task, callback)
       callback(choice.value)
       return
     end
-    -- Enumerate .cue/ subdirectories (mirrors list_task_contexts in picker.lua).
-    local cue_dir = ".cue"
-    if vim.fn.isdirectory(cue_dir) == 0 then
+
+    -- Scope list is driven by task-card slugs (always includes "master"),
+    -- not by existing context directories. `cue add --task <slug>` creates
+    -- the context dir on demand, so a task with no dir yet is selectable.
+    local scopes = M.list_scopes()
+    if not scopes then
       vim.notify("No .cue directory found", vim.log.levels.ERROR)
       return
     end
-    local contexts = {}
-    for name, kind in vim.fs.dir(cue_dir) do
-      if kind == "directory" then
-        table.insert(contexts, name)
-      end
-    end
-    table.sort(contexts)
-    if #contexts == 0 then
-      vim.notify("No task contexts found", vim.log.levels.INFO)
-      return
-    end
-    Snacks.picker.select(contexts, { prompt = "Select scope:" }, function(ctx)
-      if ctx then callback(ctx) end
+    Snacks.picker.select(scopes, { prompt = "Select scope:" }, function(slug)
+      if slug then callback(slug) end
     end)
   end)
 end
@@ -346,6 +361,28 @@ function M.open_context()
   end
 
   vim.cmd.edit(path)
+end
+
+--- Scan .cue/master/task/ for task cards and return a sorted list of slugs.
+--- Always includes "master". Returns nil if .cue/ is absent.
+---@return table|nil sorted list of scope slugs, or nil if no .cue/ found
+function M.list_scopes()
+  local cue_dir = ".cue"
+  if vim.fn.isdirectory(cue_dir) == 0 then
+    return nil
+  end
+
+  local task_dir = ".cue/master/task"
+  local names = {}
+  if vim.fn.isdirectory(task_dir) ~= 0 then
+    for name, kind in vim.fs.dir(task_dir) do
+      if kind == "file" and name:match("%.md$") then
+        table.insert(names, name)
+      end
+    end
+  end
+
+  return M.scope_set(names)
 end
 
 --- Open the task context's log file and jump to the end.

@@ -99,23 +99,12 @@ local function entry_marker(entry, active_task)
   return marker, hl
 end
 
---- List task-context directories under .cue/ (excluding stray files like
---- tags/.gitignore). Uses vim.fs.dir, the idiomatic API on nvim 0.8+.
---- Returns a sorted list of task context slugs (including "master").
----@return table|nil  sorted list of context slugs, or nil if .cue/ is absent
+--- List selectable scopes via core.list_scopes() (task-card slugs, always
+--- including "master"). Thin wrapper so the three call sites below share a
+--- single source of truth with core.confirm_scope.
+---@return table|nil  sorted list of scope slugs, or nil if .cue/ is absent
 local function list_task_contexts()
-  local cue_dir = ".cue"
-  if vim.fn.isdirectory(cue_dir) == 0 then
-    return nil
-  end
-  local contexts = {}
-  for name, kind in vim.fs.dir(cue_dir) do
-    if kind == "directory" then
-      table.insert(contexts, name)
-    end
-  end
-  table.sort(contexts)
-  return contexts
+  return core.list_scopes()
 end
 
 --- Custom Telescope entry maker for cue artifacts
