@@ -77,30 +77,6 @@ local function get_category_highlight(category)
   return config.category_highlights[category] or "TelescopeResultsNormal"
 end
 
---- Numeric sort rank for a task marker: "*" (0) < "!" (1) < " " (2).
----@param marker string
----@return integer
-local function marker_rank(marker)
-  if marker == "*" then return 0 end
-  if marker == "!" then return 1 end
-  return 2
-end
-
---- Numeric sort rank for an artifact's frontmatter priority.
---- Unknown/missing priorities sort last (99), mirroring the defensive
---- guarding in core.is_done.
----@param artifact table
----@return integer
-local function priority_rank(artifact)
-  if artifact.frontmatter and artifact.frontmatter ~= vim.NIL then
-    local p = artifact.frontmatter.priority
-    if p and p ~= vim.NIL then
-      return config.PRIORITY_RANK[p] or 99
-    end
-  end
-  return 99
-end
-
 --- Marker character for a task card. Resolves the slug from the entry's
 --- filename stem and delegates to core.task_marker_for, so display and
 --- sort share a single source of truth.
@@ -123,23 +99,12 @@ local function entry_marker(entry, active_task)
   return marker, hl
 end
 
---- List task-context directories under .cue/ (excluding stray files like
---- tags/.gitignore). Uses vim.fs.dir, the idiomatic API on nvim 0.8+.
---- Returns a sorted list of task context slugs (including "master").
----@return table|nil  sorted list of context slugs, or nil if .cue/ is absent
+--- List selectable scopes via core.list_scopes() (task-card slugs, always
+--- including "master"). Thin wrapper so the three call sites below share a
+--- single source of truth with core.confirm_scope.
+---@return table|nil  sorted list of scope slugs, or nil if .cue/ is absent
 local function list_task_contexts()
-  local cue_dir = ".cue"
-  if vim.fn.isdirectory(cue_dir) == 0 then
-    return nil
-  end
-  local contexts = {}
-  for name, kind in vim.fs.dir(cue_dir) do
-    if kind == "directory" then
-      table.insert(contexts, name)
-    end
-  end
-  table.sort(contexts)
-  return contexts
+  return core.list_scopes()
 end
 
 --- Custom Telescope entry maker for cue artifacts
@@ -255,14 +220,14 @@ end
 
 --- Sort artifacts.
 ---
---- For the task picker (opts.show_marker): primary key is the marker
---- ("*" < "!" < blank) and secondary key is the frontmatter `priority`.
---- This also fixes the latent bug where the active task card never floated
---- to the top — the old `a.branch == active_task` check is a no-op for task
---- cards because branch is always "master".
+--- For the task picker (opts.show_marker), ordering is delegated entirely
+--- to core.task_less: marker ("*" < "!" < blank), then finished
+--- (complete/closed) sinks to the bottom, then priority, then recency,
+--- then name. Extracting the comparator keeps the finished-before-priority
+--- invariant under unit test (see tests/test_task_sort.lua).
 ---
---- All pickers share the remaining tiebreakers: finished last, active
---- context first, category, recency, then name.
+--- All other pickers share: finished last, active context first, category,
+--- recency, then name.
 ---@param artifacts table
 ---@param opts table|nil  supports: show_marker (bool, task picker only)
 ---@return table
@@ -285,21 +250,9 @@ local function sort_artifacts(artifacts, opts)
   }
 
   table.sort(artifacts, function(a, b)
-    -- Task picker: marker first ("*" < "!" < blank), then priority.
+    -- Task picker: the full ordering lives in core.task_less.
     if task_sort then
-      local a_marker = entry_marker(a, active_task)
-      local b_marker = entry_marker(b, active_task)
-      local a_rank = marker_rank(a_marker)
-      local b_rank = marker_rank(b_marker)
-      if a_rank ~= b_rank then
-        return a_rank < b_rank
-      end
-
-      local a_pri = priority_rank(a)
-      local b_pri = priority_rank(b)
-      if a_pri ~= b_pri then
-        return a_pri < b_pri
-      end
+      return core.task_less(a, b, active_task)
     end
 
     local a_finished = core.is_finished(a)
