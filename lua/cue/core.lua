@@ -162,6 +162,30 @@ function M.slugify(text)
     :gsub("%-+$", "")
 end
 
+--- Convert a slug (or raw slug-ish text) into a human-readable title.
+---
+--- Extracts word tokens, capitalising each and dropping separators/punctuation.
+--- Short all-caps tokens (2-4 uppercase letters, no digits) are preserved as
+--- acronyms, so "WSS-migration" -> "WSS Migration" when the user typed the
+--- acronym in capitals.
+---
+--- Kept free of vim.* calls so it is unit-testable without Neovim.
+---@param text string|nil
+---@return string  title, or "" for nil/empty/no-word input
+function M.slug_to_title(text)
+  if not text or text == "" then return "" end
+  local words = {}
+  for word in text:gmatch("[%w']+") do
+    local is_acronym = (#word >= 2 and #word <= 4 and word:match("^[A-Z]+$") ~= nil)
+    if is_acronym then
+      table.insert(words, word)
+    else
+      table.insert(words, word:sub(1, 1):upper() .. word:sub(2):lower())
+    end
+  end
+  return table.concat(words, " ")
+end
+
 --- Pure helper that computes the filename and add() opts for a slug-based
 --- artifact of a markdown type (task/note/todo). Encodes the type-intrinsic
 --- root policy (config.SLUG_ROOT) and the frontmatter defaults
