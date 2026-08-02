@@ -39,6 +39,7 @@ check("task plan places artifact at root with master scope", function()
 	assert(plan.opts.root == true, "root should be true for task")
 	assert(plan.opts.frontmatter.status == "open", "frontmatter status")
 	assert(plan.opts.frontmatter.priority == "normal", "frontmatter priority")
+	assert(plan.opts.frontmatter.title == "Auth Login", "title derived from slug=" .. tostring(plan.opts.frontmatter.title))
 end)
 
 -- note -> root=true, note has no priority default
@@ -48,6 +49,7 @@ check("note plan places artifact at root", function()
 	assert(plan.filename == "my-idea.md", "filename=" .. tostring(plan.filename))
 	assert(plan.opts.frontmatter.status == "open", "frontmatter status")
 	assert(plan.opts.frontmatter.priority == nil, "note has no priority default")
+	assert(plan.opts.frontmatter.title == "My Idea", "title derived from slug=" .. tostring(plan.opts.frontmatter.title))
 end)
 
 -- todo -> root=false (pinned / point-in-time)
@@ -55,12 +57,20 @@ check("todo plan is pinned (root=false)", function()
 	local plan = core.slug_artifact_plan("todo", "refactor", "master")
 	assert(plan.opts.root == false, "todo should NOT be root")
 	assert(plan.filename == "refactor.md", "filename=" .. tostring(plan.filename))
+	assert(plan.opts.frontmatter.title == "Refactor", "title derived from slug=" .. tostring(plan.opts.frontmatter.title))
 end)
 
 -- slug normalisation: lowercase, spaces/punct stripped, hyphenated
 check("slug is normalised (lowercase, hyphenated)", function()
 	local plan = core.slug_artifact_plan("task", "Hello World!", "master")
 	assert(plan.filename == "hello-world.md", "filename=" .. tostring(plan.filename))
+end)
+
+-- title is derived from the RAW slug (pre-slugify) so acronyms survive
+check("title preserves uppercase acronyms typed in the raw slug", function()
+	local plan = core.slug_artifact_plan("note", "WSS-migration", "master")
+	assert(plan.filename == "wss-migration.md", "filename slugified=" .. tostring(plan.filename))
+	assert(plan.opts.frontmatter.title == "WSS Migration", "title=" .. tostring(plan.opts.frontmatter.title))
 end)
 
 -- filename always ends with exactly one .md suffix

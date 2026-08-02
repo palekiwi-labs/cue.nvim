@@ -202,13 +202,22 @@ function M.slug_artifact_plan(type, raw_slug, task)
   if not slug or slug == "" then
     return nil
   end
+  -- Derive a human-readable title from the RAW slug (pre-slugify) so
+  -- acronyms typed in capitals survive (e.g. "WSS-migration" -> "WSS
+  -- Migration"). Merge over TYPE_DEFAULTS without vim.tbl_extend to keep
+  -- this helper vim-free (unit-testable under the vim={} stub).
+  local defaults = config.TYPE_DEFAULTS[type] or {}
+  local frontmatter = {}
+  for k, v in pairs(defaults) do frontmatter[k] = v end
+  frontmatter.title = M.slug_to_title(raw_slug)
+
   return {
     filename = slug .. ".md",
     opts = {
       category    = type,
       task        = task,
       root        = config.SLUG_ROOT[type] and true or false,
-      frontmatter = config.TYPE_DEFAULTS[type] or {},
+      frontmatter = frontmatter,
     },
   }
 end
