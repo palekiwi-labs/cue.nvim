@@ -109,9 +109,10 @@ function M.setup()
 
   local function run_wizard()
     select_category(function(category)
-      -- Tasks use the slug-prompt flow (always master, root always true).
-      if category == "task" then
-        core.add_task()
+      -- task/note/todo share the slug-prompt flow. Root placement is
+      -- type-intrinsic (config.SLUG_ROOT), so no root Yes/No prompt.
+      if category == "task" or category == "note" or category == "todo" then
+        core.add_with_slug(category)
         return
       end
       prompt_filename(category, function(filename)

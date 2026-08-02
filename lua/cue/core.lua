@@ -510,31 +510,40 @@ function M.add(filename, opts)
   return filepath
 end
 
---- Prompt for a task slug, then create the task card on master.
---- Tasks always live in .cue/master/task/; no scope dialog is shown.
---- The slug is used as the filename stem (e.g. "my-feature" → "my-feature.md").
-function M.add_task()
+--- Prompt for a slug, confirm scope, then add a markdown artifact of the
+--- given type (task/note/todo). Uses the type-intrinsic root policy encoded
+--- in config.SLUG_ROOT; no root Yes/No prompt is shown.
+---
+--- When task is non-nil the scope dialog is skipped (caller already pinned
+--- scope). The scope dialog is also skipped for type == "task" (always master).
+---@param type string  artifact type ("task", "note", "todo")
+---@param task string|nil  override task context (nil = prompt via confirm_scope)
+function M.add_with_slug(type, task)
   local Snacks = require('snacks')
   Snacks.input({
-    prompt = "Task slug (e.g. my-feature):",
+    prompt = "Slug (" .. type .. "):",
     win = { row = 0.3 },
-  }, function(slug)
-    if not slug or slug == "" then return end
-    -- Normalise: lowercase, spaces/underscores → hyphens, strip non-slug chars.
-    slug = M.slugify(slug)
+  }, function(raw_slug)
+    if not raw_slug or raw_slug == "" then return end
+    -- Bail before the scope dialog if the slug normalises to nothing.
+    local slug = M.slugify(raw_slug)
     if not slug or slug == "" then
       vim.notify("Error: slug is empty after normalisation", vim.log.levels.ERROR)
       return
     end
-    local filename = slug .. ".md"
-    local defaults = config.TYPE_DEFAULTS["task"] or {}
-    M.add(filename, {
-      category    = "task",
-      task        = "master",
-      root        = true,
-      frontmatter = defaults,
-    })
+    M.confirm_scope(type, task, function(target_task)
+      local plan = M.slug_artifact_plan(type, slug, target_task)
+      -- slug was validated non-empty above, so plan is guaranteed non-nil.
+      M.add(plan.filename, plan.opts)
+    end)
   end)
+end
+
+--- Prompt for a task slug, then create the task card on master.
+--- Tasks always live in .cue/master/task/; no scope dialog is shown.
+--- The slug is used as the filename stem (e.g. "my-feature" → "my-feature.md").
+function M.add_task()
+  M.add_with_slug("task", "master")
 end
 
 --- Prompt for a title, then confirm scope, then add an artifact of the given type.

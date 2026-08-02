@@ -57,6 +57,14 @@ function M.add_task()
   return require('cue.core').add_task()
 end
 
+--- Prompt for a slug, then add a markdown artifact (task/note/todo).
+--- Uses the type-intrinsic root policy; no root Yes/No prompt.
+---@param type string
+---@param task string|nil  task context (nil = active/prompt)
+function M.add_with_slug(type, task)
+  return require('cue.core').add_with_slug(type, task)
+end
+
 --- Prompt for title, then add an artifact of the given type
 ---@param type string
 ---@param task string|nil  task context (nil = active)
