@@ -169,18 +169,33 @@ end
 --- acronyms, so "WSS-migration" -> "WSS Migration" when the user typed the
 --- acronym in capitals.
 ---
+--- Multi-byte (UTF-8) bytes are kept inside a token so accented/CJK input is
+--- not split into bogus words; byte-wise case folding is a no-op on UTF-8
+--- continuation bytes, so titles are not corrupted.
+---
 --- Kept free of vim.* calls so it is unit-testable without Neovim.
 ---@param text string|nil
 ---@return string  title, or "" for nil/empty/no-word input
 function M.slug_to_title(text)
   if not text or text == "" then return "" end
   local words = {}
-  for word in text:gmatch("[%w']+") do
-    local is_acronym = (#word >= 2 and #word <= 4 and word:match("^[A-Z]+$") ~= nil)
-    if is_acronym then
-      table.insert(words, word)
-    else
-      table.insert(words, word:sub(1, 1):upper() .. word:sub(2):lower())
+  -- [\128-\255] keeps multi-byte sequences together (see comment above).
+  for word in text:gmatch("[%w'\128-\255]+") do
+    -- Skip tokens with no core content (a stray "'" or "'''").
+    if word:match("[%w\128-\255]") then
+      local is_acronym = (#word >= 2 and #word <= 4 and word:match("^[A-Z]+$") ~= nil)
+      if is_acronym then
+        table.insert(words, word)
+      else
+        -- Capitalise the first ASCII alphanumeric so "'tis" -> "'Tis".
+        local lead, first, tail = word:match("^([^%w]*)(%w)(.*)$")
+        if first then
+          table.insert(words, lead .. first:upper() .. tail:lower())
+        else
+          -- No ASCII alnum (e.g. pure CJK): emit as-is.
+          table.insert(words, word)
+        end
+      end
     end
   end
   return table.concat(words, " ")
@@ -206,10 +221,20 @@ function M.slug_artifact_plan(type, raw_slug, task)
   -- acronyms typed in capitals survive (e.g. "WSS-migration" -> "WSS
   -- Migration"). Merge over TYPE_DEFAULTS without vim.tbl_extend to keep
   -- this helper vim-free (unit-testable under the vim={} stub).
+  -- Shallow copy is sufficient: TYPE_DEFAULTS values are scalars only.
   local defaults = config.TYPE_DEFAULTS[type] or {}
   local frontmatter = {}
   for k, v in pairs(defaults) do frontmatter[k] = v end
-  frontmatter.title = M.slug_to_title(raw_slug)
+
+  -- Only set a title that contains at least one letter. A digit-only slug
+  -- (e.g. "2026") would yield title="2026", which `cue add` emits as a YAML
+  -- number (coerce_scalar leaves it unquoted); the picker then assigns that
+  -- number straight to display_name, which must be a string. A digit "title"
+  -- is not useful anyway, so omit it.
+  local title = M.slug_to_title(raw_slug)
+  if title:match("%a") then
+    frontmatter.title = title
+  end
 
   return {
     filename = slug .. ".md",
@@ -597,7 +622,8 @@ function M.add_with_title(type, task)
     M.confirm_scope(type, task, function(target_task)
       local filename = M.slugify(title) .. ".md"
       local defaults = config.TYPE_DEFAULTS[type] or {}
-      local frontmatter = vim.tbl_extend("force", { title = title }, defaults)
+      -- Title wins over TYPE_DEFAULTS (matches slug_artifact_plan ordering).
+      local frontmatter = vim.tbl_extend("force", defaults, { title = title })
       M.add(filename, {
         category    = type,
         task        = target_task,

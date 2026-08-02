@@ -39,7 +39,8 @@ check("task plan places artifact at root with master scope", function()
 	assert(plan.opts.root == true, "root should be true for task")
 	assert(plan.opts.frontmatter.status == "open", "frontmatter status")
 	assert(plan.opts.frontmatter.priority == "normal", "frontmatter priority")
-	assert(plan.opts.frontmatter.title == "Auth Login", "title derived from slug=" .. tostring(plan.opts.frontmatter.title))
+	assert(plan.opts.frontmatter.title == "Auth Login",
+		"title derived from slug=" .. tostring(plan.opts.frontmatter.title))
 end)
 
 -- note -> root=true, note has no priority default
@@ -88,6 +89,15 @@ check("filename always ends with exactly one .md", function()
 	local plan = core.slug_artifact_plan("note", "clean", "master")
 	assert(plan.filename == "clean.md", "filename=" .. tostring(plan.filename))
 	assert(not plan.filename:match("%.md%.md$"), "double .md suffix")
+end)
+
+-- digit-only slug: title is OMITTED (would round-trip as a YAML number and
+-- crash the picker, which expects a string display_name). See core.lua guard.
+check("digit-only slug omits the title frontmatter", function()
+	local plan = core.slug_artifact_plan("note", "2026", "master")
+	assert(plan.filename == "2026.md", "filename=" .. tostring(plan.filename))
+	assert(plan.opts.frontmatter.title == nil,
+		"digit-only title should be omitted, got=" .. tostring(plan.opts.frontmatter.title))
 end)
 
 -- empty slug -> nil

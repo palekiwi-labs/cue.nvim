@@ -30,7 +30,13 @@ local cases = {
   { "PR-review",             "PR Review" },       -- 2-letter acronym kept
   { "HTML-parser",           "HTML Parser" },     -- 4-letter acronym kept
   { "UPPER-case",            "Upper Case" },      -- 5 caps -> NOT acronym
+  { "WSS",                   "WSS" },             -- acronym-only token
   { "don't-break-things",    "Don't Break Things" }, -- apostrophe preserved
+  { "'tis-the-season",       "'Tis The Season" }, -- leading apostrophe, first letter still capitalised
+  { "'''",                   "" },                -- apostrophe-only -> empty
+  { "2fa-setup",             "2fa Setup" },       -- digit-leading token
+  { "a",                     "A" },               -- single-char token
+  { "café-menu",             "Café Menu" },       -- non-ASCII kept together
   -- punct/whitespace-only inputs collapse to empty
   { "!@#$",                  "" },
   { "   ",                   "" },
@@ -55,6 +61,17 @@ if core.slug_to_title(nil) ~= "" then
 else
   print("ok:   slug_to_title(nil) = \"\"")
 end
+
+-- idempotency: title of a title is stable
+for _, case in ipairs(cases) do
+  local once = core.slug_to_title(case[1])
+  local twice = core.slug_to_title(once)
+  if once ~= twice then
+    failures = failures + 1
+    print(string.format("FAIL: not idempotent for %q: %q ~= %q", case[1], once, twice))
+  end
+end
+if failures == 0 then print("ok:   slug_to_title is idempotent") end
 
 if failures == 0 then
   print("\nAll tests passed.")
