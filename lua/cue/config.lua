@@ -24,6 +24,17 @@ M.TYPE_DEFAULTS = {
   note = { status = "open" },
 }
 
+-- Type-intrinsic root placement policy for the markdown types that share the
+-- slug-prompt creation flow (task/note/todo). Drives `slug_artifact_plan`.
+--   task -> root (flat, lives on master)
+--   note -> root (flat, stored root-level per cue skill)
+--   todo -> NOT root (pinned / point-in-time)
+M.SLUG_ROOT = {
+  task = true,
+  note = true,
+  todo = false,
+}
+
 M.category_highlights = {
   spec  = "CueCategorySpec",
   plan  = "CueCategoryPlan",

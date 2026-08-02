@@ -162,6 +162,33 @@ function M.slugify(text)
     :gsub("%-+$", "")
 end
 
+--- Pure helper that computes the filename and add() opts for a slug-based
+--- artifact of a markdown type (task/note/todo). Encodes the type-intrinsic
+--- root policy (config.SLUG_ROOT) and the frontmatter defaults
+--- (config.TYPE_DEFAULTS).
+---
+--- Kept free of vim.* calls so it is unit-testable without Neovim.
+---@param type string        artifact type ("task", "note", "todo")
+---@param raw_slug string    user-entered slug text (normalised via slugify)
+---@param task string        resolved cue scope slug (e.g. "master")
+---@return table|nil  { filename=..., opts={ category, task, root, frontmatter } },
+---                   or nil when the slug normalises to empty
+function M.slug_artifact_plan(type, raw_slug, task)
+  local slug = M.slugify(raw_slug)
+  if not slug or slug == "" then
+    return nil
+  end
+  return {
+    filename = slug .. ".md",
+    opts = {
+      category    = type,
+      task        = task,
+      root        = config.SLUG_ROOT[type] and true or false,
+      frontmatter = config.TYPE_DEFAULTS[type] or {},
+    },
+  }
+end
+
 --- Execute a command (as an arg list) and return its stdout.
 --- Uses vim.system, the idiomatic API on nvim 0.10+. stderr is captured but
 --- discarded; a non-zero exit code yields (nil, error).
