@@ -565,7 +565,11 @@ function M.add_with_slug(type, task)
       return
     end
     M.confirm_scope(type, task, function(target_task)
-      local plan = M.slug_artifact_plan(type, slug, target_task)
+      -- Pass the RAW slug (not the normalised `slug`): slug_artifact_plan
+      -- re-normalises it for the filename, but derives the title from the
+      -- raw text so acronyms the user typed in capitals survive. Passing
+      -- the lowercased `slug` here would silently kill acronym detection.
+      local plan = M.slug_artifact_plan(type, raw_slug, target_task)
       -- slug was validated non-empty above, so plan is guaranteed non-nil.
       M.add(plan.filename, plan.opts)
     end)

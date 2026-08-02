@@ -73,6 +73,16 @@ check("title preserves uppercase acronyms typed in the raw slug", function()
 	assert(plan.opts.frontmatter.title == "WSS Migration", "title=" .. tostring(plan.opts.frontmatter.title))
 end)
 
+-- Regression guard for the add_with_slug -> slug_artifact_plan hand-off
+-- (core.lua:567). The caller MUST forward the RAW slug; passing an already
+-- slugified value loses acronym casing. This pins that contract so a future
+-- refactor cannot silently re-break the production flow.
+check("normalised slug does NOT preserve acronyms (caller must pass raw)", function()
+	local plan = core.slug_artifact_plan("note", core.slugify("WSS-migration"), "master")
+	assert(plan.opts.frontmatter.title == "Wss Migration",
+		"normalised slug should lose acronym, got=" .. tostring(plan.opts.frontmatter.title))
+end)
+
 -- filename always ends with exactly one .md suffix
 check("filename always ends with exactly one .md", function()
 	local plan = core.slug_artifact_plan("note", "clean", "master")
