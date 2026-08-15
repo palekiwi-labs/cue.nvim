@@ -187,10 +187,15 @@ local function make_mem_entry_maker(opts)
           kind_hl = config.priority_highlights[fm.priority:lower()] or kind_hl
         end
       end
+      if done_hl then
+        kind_hl = done_hl
+      end
       table.insert(cols, { kind_badge, kind_hl })
 
+      local meta_hl = done_hl or "TelescopeResultsComment"
+
       local task_slug = vim.fn.fnamemodify(entry.name, ":t:r")
-      table.insert(cols, { task_slug, "TelescopeResultsComment" })
+      table.insert(cols, { task_slug, meta_hl })
 
       local parent_display = ""
       if entry.frontmatter and entry.frontmatter ~= vim.NIL then
@@ -199,14 +204,16 @@ local function make_mem_entry_maker(opts)
           parent_display = "^ " .. fm.parent
         end
       end
-      table.insert(cols, { parent_display, "TelescopeResultsComment" })
+      table.insert(cols, { parent_display, meta_hl })
 
-      table.insert(cols, { hash_display, "TelescopeResultsComment" })
+      table.insert(cols, { hash_display, meta_hl })
     else
-      table.insert(cols, { format_category(entry.category), get_category_highlight(entry.category) })
+      local cat_hl = done_hl or get_category_highlight(entry.category)
+      local meta_hl = done_hl or "TelescopeResultsComment"
+      table.insert(cols, { format_category(entry.category), cat_hl })
       table.insert(cols, { display_name, highlight })
-      table.insert(cols, { hash_display, "TelescopeResultsComment" })
-      table.insert(cols, { entry.branch, "TelescopeResultsComment" })
+      table.insert(cols, { hash_display, meta_hl })
+      table.insert(cols, { entry.branch, meta_hl })
     end
 
     return displayer(cols)
