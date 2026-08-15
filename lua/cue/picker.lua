@@ -166,6 +166,10 @@ local function make_mem_entry_maker(opts)
       end
     end
 
+    -- Strikethrough (CueStatusDone) applies ONLY to title.
+    -- Non-title metadata columns use CueStatusComplete (grey, no strikethrough).
+    local done_no_strike_hl = done_hl and "CueStatusComplete" or nil
+
     local cols = {}
     if show_marker then
       -- "*" = active task (overrides), "!" = in-progress, " " otherwise.
@@ -188,12 +192,12 @@ local function make_mem_entry_maker(opts)
           kind_hl = config.priority_highlights[fm.priority:lower()] or kind_hl
         end
       end
-      if done_hl then
-        kind_hl = done_hl
+      if done_no_strike_hl then
+        kind_hl = done_no_strike_hl
       end
       table.insert(cols, { kind_badge, kind_hl })
 
-      local meta_hl = done_hl or "TelescopeResultsComment"
+      local meta_hl = done_no_strike_hl or "TelescopeResultsComment"
 
       local task_slug = vim.fn.fnamemodify(entry.name, ":t:r")
       table.insert(cols, { task_slug, meta_hl })
@@ -209,8 +213,8 @@ local function make_mem_entry_maker(opts)
 
       table.insert(cols, { hash_display, meta_hl })
     else
-      local cat_hl = done_hl or get_category_highlight(entry.category)
-      local meta_hl = done_hl or "TelescopeResultsComment"
+      local cat_hl = done_no_strike_hl or get_category_highlight(entry.category)
+      local meta_hl = done_no_strike_hl or "TelescopeResultsComment"
       table.insert(cols, { format_category(entry.category), cat_hl })
       table.insert(cols, { display_name, highlight })
       table.insert(cols, { hash_display, meta_hl })
