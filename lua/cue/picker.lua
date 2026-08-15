@@ -423,8 +423,6 @@ function M.pick_artifacts(opts)
   local previewer
   if opts.preview ~= nil then
     previewer = opts.preview and conf.file_previewer({}) or false
-  elseif opts.type == "task" then
-    previewer = false
   else
     previewer = conf.file_previewer({})
   end
