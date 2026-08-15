@@ -126,7 +126,6 @@ local function make_mem_entry_maker(opts)
       items = {
         { width = 1 },        -- active-task marker ("*" or " ")
         { width = 8 },        -- kind badge (BUILD, DESIGN, RESEARCH, REVIEW, COORD)
-        { width = 8 },        -- priority badge (CRITICAL, HIGH, NORMAL, LOW)
         { width = 50 },       -- filename / title
         { width = 25 },       -- parent link (^ parent-slug)
         { remaining = true }, -- hash
@@ -158,6 +157,9 @@ local function make_mem_entry_maker(opts)
       if fm.title and fm.title ~= vim.NIL and fm.title ~= "" then
         display_name = fm.title
       end
+      if fm.priority and fm.priority ~= vim.NIL and fm.priority ~= "" then
+        highlight = config.priority_highlights[fm.priority:lower()] or highlight
+      end
       -- closed -> grey + strikethrough, complete -> grey only.
       local done_hl = core.done_highlight_for(fm.status)
       if done_hl then
@@ -183,17 +185,6 @@ local function make_mem_entry_maker(opts)
         end
       end
       table.insert(cols, { kind_badge, kind_hl })
-
-      local priority_badge = "NORMAL"
-      local priority_hl = "CuePriorityNormal"
-      if entry.frontmatter and entry.frontmatter ~= vim.NIL then
-        local fm = entry.frontmatter
-        if fm.priority and fm.priority ~= vim.NIL and fm.priority ~= "" then
-          priority_badge = string.upper(fm.priority)
-          priority_hl = config.priority_highlights[fm.priority:lower()] or "TelescopeResultsComment"
-        end
-      end
-      table.insert(cols, { priority_badge, priority_hl })
 
       table.insert(cols, { display_name, highlight })
 
