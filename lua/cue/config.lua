@@ -56,6 +56,13 @@ M.kind_highlights = {
   coord    = "CueKindCoord",
 }
 
+M.priority_highlights = {
+  critical = "CuePriorityCritical",
+  high     = "CuePriorityHigh",
+  normal   = "CuePriorityNormal",
+  low      = "CuePriorityLow",
+}
+
 -- Resolved config (populated by apply())
 M.values = {}
 

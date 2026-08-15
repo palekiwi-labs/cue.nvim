@@ -126,10 +126,10 @@ local function make_mem_entry_maker(opts)
       items = {
         { width = 1 },        -- active-task marker ("*" or " ")
         { width = 8 },        -- kind badge (BUILD, DESIGN, RESEARCH, REVIEW, COORD)
+        { width = 8 },        -- priority badge (CRITICAL, HIGH, NORMAL, LOW)
         { width = 50 },       -- filename / title
         { width = 25 },       -- parent link (^ parent-slug)
-        { width = 10 },       -- hash
-        { remaining = true }, -- task context slug (entry.branch = JSON wire field)
+        { remaining = true }, -- hash
       },
     }
   else
@@ -184,6 +184,17 @@ local function make_mem_entry_maker(opts)
       end
       table.insert(cols, { kind_badge, kind_hl })
 
+      local priority_badge = "NORMAL"
+      local priority_hl = "CuePriorityNormal"
+      if entry.frontmatter and entry.frontmatter ~= vim.NIL then
+        local fm = entry.frontmatter
+        if fm.priority and fm.priority ~= vim.NIL and fm.priority ~= "" then
+          priority_badge = string.upper(fm.priority)
+          priority_hl = config.priority_highlights[fm.priority:lower()] or "TelescopeResultsComment"
+        end
+      end
+      table.insert(cols, { priority_badge, priority_hl })
+
       table.insert(cols, { display_name, highlight })
 
       local parent_display = ""
@@ -196,7 +207,6 @@ local function make_mem_entry_maker(opts)
       table.insert(cols, { parent_display, "TelescopeResultsComment" })
 
       table.insert(cols, { hash_display, "TelescopeResultsComment" })
-      table.insert(cols, { entry.branch, "TelescopeResultsComment" })
     else
       table.insert(cols, { format_category(entry.category), get_category_highlight(entry.category) })
       table.insert(cols, { display_name, highlight })
@@ -228,6 +238,9 @@ local function make_mem_entry_maker(opts)
       end
       if fm.kind and fm.kind ~= vim.NIL then
         fm_search = fm_search .. " " .. fm.kind
+      end
+      if fm.priority and fm.priority ~= vim.NIL then
+        fm_search = fm_search .. " " .. fm.priority
       end
       if fm.parent and fm.parent ~= vim.NIL then
         fm_search = fm_search .. " ^ " .. fm.parent .. " " .. fm.parent
@@ -439,8 +452,8 @@ function M.pick_artifacts(opts)
         copy_to_clipboard(prompt_bufnr, function(e) return e.hash end, "hash")
       end)
 
-      -- Jump to the parent artifact (<C-p>)
-      map({ 'i', 'n' }, '<C-p>', function()
+      -- Jump to the parent artifact (<A-p>)
+      map({ 'i', 'n' }, '<A-p>', function()
         local entry = action_state.get_selected_entry()
         if not entry or not entry.frontmatter or entry.frontmatter == vim.NIL then return end
         local parent_slug = entry.frontmatter.parent
