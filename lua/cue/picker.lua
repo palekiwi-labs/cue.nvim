@@ -125,8 +125,8 @@ local function make_mem_entry_maker(opts)
       separator = " ",
       items = {
         { width = 1 },        -- active-task marker ("*" or " ")
-        { width = 8 },        -- kind badge (BUILD, DESIGN, RESEARCH, REVIEW, COORD)
         { width = 55 },       -- filename / title
+        { width = 8 },        -- kind badge (build, design, research, review, coord)
         { width = 25 },       -- task slug
         { width = 20 },       -- parent link (^ parent-slug)
         { remaining = true }, -- hash
@@ -173,12 +173,14 @@ local function make_mem_entry_maker(opts)
       local marker, marker_hl = entry_marker(entry, active_task)
       table.insert(cols, { marker, marker_hl })
 
-      local kind_badge = "TASK"
+      table.insert(cols, { display_name, highlight })
+
+      local kind_badge = "task"
       local kind_hl = "CueCategoryTask"
       if entry.frontmatter and entry.frontmatter ~= vim.NIL then
         local fm = entry.frontmatter
         if fm.kind and fm.kind ~= vim.NIL and fm.kind ~= "" then
-          kind_badge = string.upper(fm.kind)
+          kind_badge = fm.kind:lower()
           kind_hl = config.kind_highlights[fm.kind:lower()] or "CueCategoryTask"
         end
         if fm.priority and fm.priority ~= vim.NIL and fm.priority ~= "" then
@@ -186,8 +188,6 @@ local function make_mem_entry_maker(opts)
         end
       end
       table.insert(cols, { kind_badge, kind_hl })
-
-      table.insert(cols, { display_name, highlight })
 
       local task_slug = vim.fn.fnamemodify(entry.name, ":t:r")
       table.insert(cols, { task_slug, "TelescopeResultsComment" })
