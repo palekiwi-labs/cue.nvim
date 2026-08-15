@@ -39,8 +39,19 @@ check("task plan places artifact at root with master scope", function()
 	assert(plan.opts.root == true, "root should be true for task")
 	assert(plan.opts.frontmatter.status == "open", "frontmatter status")
 	assert(plan.opts.frontmatter.priority == "normal", "frontmatter priority")
+	assert(plan.opts.frontmatter.kind == "build", "frontmatter default kind should be build")
 	assert(plan.opts.frontmatter.title == "Auth Login",
 		"title derived from slug=" .. tostring(plan.opts.frontmatter.title))
+end)
+
+check("task plan accepts extra_fm for kind and parent", function()
+	local plan = core.slug_artifact_plan("task", "auth-login", "master", {
+		kind = "design",
+		parent = "refine-cue-skills",
+	})
+	assert(plan ~= nil, "expected a plan, got nil")
+	assert(plan.opts.frontmatter.kind == "design", "kind=" .. tostring(plan.opts.frontmatter.kind))
+	assert(plan.opts.frontmatter.parent == "refine-cue-skills", "parent=" .. tostring(plan.opts.frontmatter.parent))
 end)
 
 -- note -> root=true, note has no priority default

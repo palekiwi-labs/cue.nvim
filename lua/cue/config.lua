@@ -18,7 +18,7 @@ M.PRIORITY_RANK = {
 }
 
 M.TYPE_DEFAULTS = {
-  task = { status = "open", priority = "normal" },
+  task = { status = "open", priority = "normal", kind = "build" },
   todo = { status = "open", priority = "normal" },
   plan = { status = "open", priority = "normal" },
   note = { status = "open" },
@@ -46,6 +46,14 @@ M.category_highlights = {
   trace = "CueCategoryTrace",
   tmp   = "CueCategoryTmp",
   ref   = "CueCategoryRef",
+}
+
+M.kind_highlights = {
+  research = "CueKindResearch",
+  design   = "CueKindDesign",
+  build    = "CueKindBuild",
+  review   = "CueKindReview",
+  coord    = "CueKindCoord",
 }
 
 -- Resolved config (populated by apply())

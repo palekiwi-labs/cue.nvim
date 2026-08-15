@@ -109,19 +109,38 @@ function M.setup()
 
   local function run_wizard()
     select_category(function(category)
-      -- task/note/todo share the slug-prompt flow. Root placement is
-      -- type-intrinsic (config.SLUG_ROOT), so no root Yes/No prompt.
-      if category == "task" or category == "note" or category == "todo" then
-        core.add_with_slug(category)
+      -- task/note/todo share the slug-prompt flow with wizard kind/parent prompts.
+      if category == "task" then
+        core.prompt_task_kind(function(kind)
+          core.prompt_parent(function(parent)
+            local fm = {}
+            if kind then fm.kind = kind end
+            if parent then fm.parent = parent end
+            core.add_with_slug("task", "master", fm)
+          end)
+        end)
+        return
+      elseif category == "note" or category == "todo" then
+        core.prompt_parent(function(parent)
+          local fm = {}
+          if parent then fm.parent = parent end
+          core.add_with_slug(category, nil, fm)
+        end)
         return
       end
+
       prompt_filename(category, function(filename)
         -- confirm_scope shows the two-item scope dialog for non-task types.
         core.confirm_scope(category, nil, function(task)
-          prompt_root_and_add(filename, {
-            category = category == "spec" and nil or category,
-            task     = task,
-          })
+          core.prompt_parent(function(parent)
+            local fm = {}
+            if parent then fm.parent = parent end
+            prompt_root_and_add(filename, {
+              category    = category == "spec" and nil or category,
+              task        = task,
+              frontmatter = fm,
+            })
+          end)
         end)
       end)
     end)

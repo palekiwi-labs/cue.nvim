@@ -229,9 +229,10 @@ end
 ---@param type string        artifact type ("task", "note", "todo")
 ---@param raw_slug string    user-entered slug text (normalised via slugify)
 ---@param task string        resolved cue scope slug (e.g. "master")
+---@param extra_fm table|nil extra frontmatter fields (e.g. { kind = "design", parent = "refine-cue-skills" })
 ---@return table|nil  { filename=..., opts={ category, task, root, frontmatter } },
 ---                   or nil when the slug normalises to empty
-function M.slug_artifact_plan(type, raw_slug, task)
+function M.slug_artifact_plan(type, raw_slug, task, extra_fm)
   local slug = M.slugify(raw_slug)
   if not slug or slug == "" then
     return nil
@@ -245,13 +246,21 @@ function M.slug_artifact_plan(type, raw_slug, task)
   local frontmatter = {}
   for k, v in pairs(defaults) do frontmatter[k] = v end
 
+  if extra_fm and _G.type(extra_fm) == "table" then
+    for k, v in pairs(extra_fm) do
+      if v ~= nil and v ~= "" and v ~= vim.NIL then
+        frontmatter[k] = v
+      end
+    end
+  end
+
   -- Only set a title that contains at least one letter. A digit-only slug
   -- (e.g. "2026") would yield title="2026", which `cue add` emits as a YAML
   -- number (coerce_scalar leaves it unquoted); the picker then assigns that
   -- number straight to display_name, which must be a string. A digit "title"
   -- is not useful anyway, so omit it.
   local title = M.slug_to_title(raw_slug)
-  if title:match("%a") then
+  if title:match("%a") and not frontmatter.title then
     frontmatter.title = title
   end
 
@@ -587,6 +596,69 @@ function M.add(filename, opts)
   return filepath
 end
 
+--- Prompt for task category kind (research|design|build|review|coord)
+---@param callback function called with selected kind string or nil
+function M.prompt_task_kind(callback)
+  local Snacks = require('snacks')
+  local items = {
+    { label = "build",    desc = "Feature implementation & test execution (default)" },
+    { label = "design",   desc = "Specification & context setup" },
+    { label = "research", desc = "Exploration & feasibility analysis" },
+    { label = "review",   desc = "Code review & evaluation" },
+    { label = "coord",    desc = "Multi-component orchestration" },
+  }
+  Snacks.picker.select(items, {
+    prompt = "Select Task Kind:",
+    format_item = function(item)
+      return string.format("%-10s  %s", item.label, item.desc)
+    end,
+  }, function(choice)
+    if choice then
+      callback(choice.label)
+    else
+      callback(nil)
+    end
+  end)
+end
+
+--- Prompt for parent task selection from available scopes
+---@param callback function called with selected parent slug or nil
+function M.prompt_parent(callback)
+  local Snacks = require('snacks')
+  local scopes = M.list_scopes() or { "master" }
+  local active = M.get_active_task().context
+
+  local items = {
+    { label = "(None)", value = nil, desc = "No parent link" },
+  }
+
+  if active and active ~= "master" then
+    table.insert(items, { label = "active: " .. active, value = active, desc = "Active task context" })
+  end
+
+  for _, slug in ipairs(scopes) do
+    if slug ~= "master" and slug ~= active then
+      table.insert(items, { label = slug, value = slug, desc = "Task card" })
+    end
+  end
+
+  Snacks.picker.select(items, {
+    prompt = "Select Parent Task:",
+    format_item = function(item)
+      if item.desc then
+        return string.format("%-30s  %s", item.label, item.desc)
+      end
+      return item.label
+    end,
+  }, function(choice)
+    if choice then
+      callback(choice.value)
+    else
+      callback(nil)
+    end
+  end)
+end
+
 --- Prompt for a slug, confirm scope, then add a markdown artifact of the
 --- given type (task/note/todo). Uses the type-intrinsic root policy encoded
 --- in config.SLUG_ROOT; no root Yes/No prompt is shown.
@@ -595,7 +667,8 @@ end
 --- scope). The scope dialog is also skipped for type == "task" (always master).
 ---@param type string  artifact type ("task", "note", "todo")
 ---@param task string|nil  override task context (nil = prompt via confirm_scope)
-function M.add_with_slug(type, task)
+---@param extra_fm table|nil  extra frontmatter fields (e.g. { kind = "design", parent = "refine-cue-skills" })
+function M.add_with_slug(type, task, extra_fm)
   local Snacks = require('snacks')
   Snacks.input({
     prompt = "Slug (" .. type .. "):",
@@ -609,12 +682,7 @@ function M.add_with_slug(type, task)
       return
     end
     M.confirm_scope(type, task, function(target_task)
-      -- Pass the RAW slug (not the normalised `slug`): slug_artifact_plan
-      -- re-normalises it for the filename, but derives the title from the
-      -- raw text so acronyms the user typed in capitals survive. Passing
-      -- the lowercased `slug` here would silently kill acronym detection.
-      local plan = M.slug_artifact_plan(type, raw_slug, target_task)
-      -- slug was validated non-empty above, so plan is guaranteed non-nil.
+      local plan = M.slug_artifact_plan(type, raw_slug, target_task, extra_fm)
       M.add(plan.filename, plan.opts)
     end)
   end)

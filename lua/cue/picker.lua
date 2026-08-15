@@ -125,8 +125,9 @@ local function make_mem_entry_maker(opts)
       separator = " ",
       items = {
         { width = 1 },        -- active-task marker ("*" or " ")
-        { width = 5 },        -- category badge
-        { width = 60 },       -- filename / title
+        { width = 8 },        -- kind badge (BUILD, DESIGN, RESEARCH, REVIEW, COORD)
+        { width = 50 },       -- filename / title
+        { width = 25 },       -- parent link (^ parent-slug)
         { width = 10 },       -- hash
         { remaining = true }, -- task context slug (entry.branch = JSON wire field)
       },
@@ -171,11 +172,37 @@ local function make_mem_entry_maker(opts)
       -- ordering never disagree.
       local marker, marker_hl = entry_marker(entry, active_task)
       table.insert(cols, { marker, marker_hl })
+
+      local kind_badge = "TASK"
+      local kind_hl = "CueCategoryTask"
+      if entry.frontmatter and entry.frontmatter ~= vim.NIL then
+        local fm = entry.frontmatter
+        if fm.kind and fm.kind ~= vim.NIL and fm.kind ~= "" then
+          kind_badge = string.upper(fm.kind)
+          kind_hl = config.kind_highlights[fm.kind:lower()] or "CueCategoryTask"
+        end
+      end
+      table.insert(cols, { kind_badge, kind_hl })
+
+      table.insert(cols, { display_name, highlight })
+
+      local parent_display = ""
+      if entry.frontmatter and entry.frontmatter ~= vim.NIL then
+        local fm = entry.frontmatter
+        if fm.parent and fm.parent ~= vim.NIL and fm.parent ~= "" then
+          parent_display = "^ " .. fm.parent
+        end
+      end
+      table.insert(cols, { parent_display, "TelescopeResultsComment" })
+
+      table.insert(cols, { hash_display, "TelescopeResultsComment" })
+      table.insert(cols, { entry.branch, "TelescopeResultsComment" })
+    else
+      table.insert(cols, { format_category(entry.category), get_category_highlight(entry.category) })
+      table.insert(cols, { display_name, highlight })
+      table.insert(cols, { hash_display, "TelescopeResultsComment" })
+      table.insert(cols, { entry.branch, "TelescopeResultsComment" })
     end
-    table.insert(cols, { format_category(entry.category),    get_category_highlight(entry.category) })
-    table.insert(cols, { display_name,                       highlight })
-    table.insert(cols, { hash_display,                       "TelescopeResultsComment" })
-    table.insert(cols, { entry.branch,                       "TelescopeResultsComment" })
 
     return displayer(cols)
   end
@@ -198,6 +225,12 @@ local function make_mem_entry_maker(opts)
       end
       if fm.status and fm.status ~= vim.NIL then
         fm_search = fm_search .. " " .. fm.status
+      end
+      if fm.kind and fm.kind ~= vim.NIL then
+        fm_search = fm_search .. " " .. fm.kind
+      end
+      if fm.parent and fm.parent ~= vim.NIL then
+        fm_search = fm_search .. " ^ " .. fm.parent .. " " .. fm.parent
       end
     end
 
@@ -367,14 +400,24 @@ function M.pick_artifacts(opts)
     prompt_title = prompt_title .. " [" .. opts.type:upper() .. "]"
   end
 
+  local previewer
+  if opts.preview ~= nil then
+    previewer = opts.preview and conf.file_previewer({}) or false
+  elseif opts.type == "task" then
+    previewer = false
+  else
+    previewer = conf.file_previewer({})
+  end
+
   pickers.new({}, {
     prompt_title = prompt_title,
+    default_text = opts.default_text,
     finder = finders.new_table({
       results     = artifacts,
       entry_maker = make_mem_entry_maker(opts),
     }),
     sorter    = conf.generic_sorter({}),
-    previewer = conf.file_previewer({}),
+    previewer = previewer,
     attach_mappings = function(prompt_bufnr, map)
       actions.select_default:replace(function()
         actions.close(prompt_bufnr)
@@ -395,6 +438,41 @@ function M.pick_artifacts(opts)
       map({ 'i', 'n' }, '<C-h>', function()
         copy_to_clipboard(prompt_bufnr, function(e) return e.hash end, "hash")
       end)
+
+      -- Jump to the parent artifact (<C-p>)
+      map({ 'i', 'n' }, '<C-p>', function()
+        local entry = action_state.get_selected_entry()
+        if not entry or not entry.frontmatter or entry.frontmatter == vim.NIL then return end
+        local parent_slug = entry.frontmatter.parent
+        if not parent_slug or parent_slug == vim.NIL or parent_slug == "" then
+          vim.notify("Selected artifact has no parent link", vim.log.levels.WARN)
+          return
+        end
+        local parent_path = ".cue/master/task/" .. parent_slug .. ".md"
+        if vim.fn.filereadable(parent_path) == 0 then
+          parent_path = ".cue/" .. parent_slug .. ".md"
+        end
+        if vim.fn.filereadable(parent_path) == 0 then
+          vim.notify("Parent artifact file not found: " .. parent_slug, vim.log.levels.WARN)
+          return
+        end
+        actions.close(prompt_bufnr)
+        vim.cmd.edit(parent_path)
+      end)
+
+      -- Filter child tasks of selected task (<C-f>)
+      if opts.type == "task" then
+        map({ 'i', 'n' }, '<C-f>', function()
+          local entry = action_state.get_selected_entry()
+          if not entry then return end
+          local slug = vim.fn.fnamemodify(entry.name, ":r")
+          if not slug or slug == "" then return end
+          actions.close(prompt_bufnr)
+          vim.schedule(function()
+            M.pick_artifacts({ type = "task", default_text = slug })
+          end)
+        end)
+      end
 
       -- Switch active task context to the selected entry's context (<C-s>).
       -- For task-type pickers the slug is the filename stem (entry.branch is
