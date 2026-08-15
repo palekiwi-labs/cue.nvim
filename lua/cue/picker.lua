@@ -152,6 +152,7 @@ local function make_mem_entry_maker(opts)
 
     local display_name = utils.transform_path(opts, entry.name)
     local highlight    = "TelescopeResultsNormal"
+    local done_hl      = nil
 
     if entry.frontmatter and entry.frontmatter ~= vim.NIL then
       local fm = entry.frontmatter
@@ -159,7 +160,7 @@ local function make_mem_entry_maker(opts)
         display_name = fm.title
       end
       -- closed -> grey + strikethrough, complete -> grey only.
-      local done_hl = core.done_highlight_for(fm.status)
+      done_hl = core.done_highlight_for(fm.status)
       if done_hl then
         highlight = done_hl
       end
