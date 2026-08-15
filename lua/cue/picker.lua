@@ -126,8 +126,8 @@ local function make_mem_entry_maker(opts)
       items = {
         { width = 1 },        -- active-task marker ("*" or " ")
         { width = 8 },        -- kind badge (BUILD, DESIGN, RESEARCH, REVIEW, COORD)
-        { width = 40 },       -- filename / title
-        { width = 30 },       -- task slug
+        { width = 55 },       -- filename / title
+        { width = 25 },       -- task slug
         { width = 20 },       -- parent link (^ parent-slug)
         { remaining = true }, -- hash
       },
