@@ -157,9 +157,6 @@ local function make_mem_entry_maker(opts)
       if fm.title and fm.title ~= vim.NIL and fm.title ~= "" then
         display_name = fm.title
       end
-      if fm.priority and fm.priority ~= vim.NIL and fm.priority ~= "" then
-        highlight = config.priority_highlights[fm.priority:lower()] or highlight
-      end
       -- closed -> grey + strikethrough, complete -> grey only.
       local done_hl = core.done_highlight_for(fm.status)
       if done_hl then
@@ -182,6 +179,9 @@ local function make_mem_entry_maker(opts)
         if fm.kind and fm.kind ~= vim.NIL and fm.kind ~= "" then
           kind_badge = string.upper(fm.kind)
           kind_hl = config.kind_highlights[fm.kind:lower()] or "CueCategoryTask"
+        end
+        if fm.priority and fm.priority ~= vim.NIL and fm.priority ~= "" then
+          kind_hl = config.priority_highlights[fm.priority:lower()] or kind_hl
         end
       end
       table.insert(cols, { kind_badge, kind_hl })

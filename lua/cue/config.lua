@@ -59,6 +59,8 @@ M.kind_highlights = {
 M.priority_highlights = {
   critical = "CuePriorityCritical",
   high     = "CuePriorityHigh",
+  normal   = "CuePriorityNormal",
+  low      = "CuePriorityLow",
 }
 
 -- Resolved config (populated by apply())

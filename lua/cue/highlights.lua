@@ -42,9 +42,11 @@ function M.setup()
   vim.api.nvim_set_hl(0, "CueKindReview", { fg = COLORS.orange, bold = false })
   vim.api.nvim_set_hl(0, "CueKindCoord", { fg = COLORS.purple, bold = false })
 
-  -- Priority highlights (critical and high override title color)
+  -- Priority highlights (applied to task kind badge)
   vim.api.nvim_set_hl(0, "CuePriorityCritical", { fg = COLORS.red, bold = false })
   vim.api.nvim_set_hl(0, "CuePriorityHigh", { fg = COLORS.orange, bold = false })
+  vim.api.nvim_set_hl(0, "CuePriorityNormal", { fg = COLORS.cyan, bold = false })
+  vim.api.nvim_set_hl(0, "CuePriorityLow", { fg = COLORS.grey, bold = false })
 end
 
 return M
