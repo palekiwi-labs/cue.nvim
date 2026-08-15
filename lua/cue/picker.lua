@@ -126,8 +126,9 @@ local function make_mem_entry_maker(opts)
       items = {
         { width = 1 },        -- active-task marker ("*" or " ")
         { width = 8 },        -- kind badge (BUILD, DESIGN, RESEARCH, REVIEW, COORD)
-        { width = 50 },       -- filename / title
-        { width = 25 },       -- parent link (^ parent-slug)
+        { width = 40 },       -- filename / title
+        { width = 30 },       -- task slug
+        { width = 20 },       -- parent link (^ parent-slug)
         { remaining = true }, -- hash
       },
     }
@@ -187,6 +188,9 @@ local function make_mem_entry_maker(opts)
       table.insert(cols, { kind_badge, kind_hl })
 
       table.insert(cols, { display_name, highlight })
+
+      local task_slug = vim.fn.fnamemodify(entry.name, ":t:r")
+      table.insert(cols, { task_slug, "TelescopeResultsComment" })
 
       local parent_display = ""
       if entry.frontmatter and entry.frontmatter ~= vim.NIL then
