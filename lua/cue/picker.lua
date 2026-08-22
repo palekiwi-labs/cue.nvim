@@ -298,6 +298,35 @@ local function make_mem_entry_maker(opts)
   end
 end
 
+--- Apply pickers' exclude/status filters to fetched artifacts.
+---
+--- exclude_type (client-side negative type filter; no cue list CLI
+--- equivalent exists) applies to every picker. Status filters apply to
+--- task-type pickers only: opts.status is a positive filter (inbox
+--- picker), opts.board hides config.HIDDEN_TASK_STATUSES (C-t board).
+--- Both decisions live in pure core helpers under unit test.
+---@param artifacts table
+---@param opts table|nil  supports: exclude_type, status, board, type
+---@return table
+local function filter_artifacts(artifacts, opts)
+  opts = opts or {}
+  local is_task_picker = opts.type == "task"
+  local out = {}
+  for _, a in ipairs(artifacts) do
+    -- exclude_type: negative type filter (all pickers).
+    local excluded = core.type_excluded(a.category, opts)
+    -- Status filters: task-type pickers only (positive filter or board
+    -- hiding of config.HIDDEN_TASK_STATUSES).
+    if not excluded and is_task_picker then
+      excluded = core.task_status_excluded(a.frontmatter, opts)
+    end
+    if not excluded then
+      out[#out + 1] = a
+    end
+  end
+  return out
+end
+
 --- Sort artifacts.
 ---
 --- For the task picker (opts.show_marker), ordering is delegated entirely
@@ -428,6 +457,12 @@ function M.pick_artifacts(opts)
   local artifacts = get_cue_artifacts(opts)
   if not artifacts or #artifacts == 0 then return end
 
+  artifacts = filter_artifacts(artifacts, opts)
+  if #artifacts == 0 then
+    vim.notify("No cue artifacts after filters", vim.log.levels.INFO)
+    return
+  end
+
   artifacts = sort_artifacts(artifacts, opts)
 
   local prompt_title = "Cue Artifacts"
@@ -443,6 +478,9 @@ function M.pick_artifacts(opts)
   end
   if opts.type then
     prompt_title = prompt_title .. " [" .. opts.type:upper() .. "]"
+  end
+  if opts.status then
+    prompt_title = prompt_title .. " [" .. opts.status:upper() .. "]"
   end
 
   local previewer
