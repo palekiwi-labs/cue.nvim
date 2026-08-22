@@ -133,12 +133,12 @@ local function make_mem_entry_maker(opts)
       separator = " ",
       items = {
         { width = 1 },        -- active-task marker ("*" or " ")
-        { width = 3 },        -- kind badge (RES, DES, BLD, REV, COR)
+        { width = 9 },        -- kind (full word; "research" is the longest)
+        { width = 1 },        -- priority caret (critical/high only)
         { width = 60 },       -- filename / title
         { width = 12 },       -- tag (#first-tag; all tags searchable)
-        { width = 25 },       -- task slug
+        { remaining = true }, -- task slug (absorbs all spare width)
         { width = 20 },       -- parent link (^ parent-slug)
-        { remaining = true }, -- hash
       },
     }
   else
@@ -187,24 +187,44 @@ local function make_mem_entry_maker(opts)
       local marker, marker_hl = entry_marker(entry, active_task)
       table.insert(cols, { marker, marker_hl })
 
-      -- Kind badge (3-char uppercase) directly after the marker so kinds
-      -- form an aligned column for quick visual filtering by kind.
-      local kind_badge = core.kind_badge(nil) -- missing kind -> "TSK"
+      -- Kind column: full lowercase word, colored per kind. Overloading
+      -- this column with priority color was unreadable (operator QA
+      -- 2026-08-22); priority now has its own caret column. Missing kind
+      -- (majority of legacy cards) shows the generic "task".
+      local kind_word = "task"
       local kind_hl = "CueCategoryTask"
       if entry.frontmatter and entry.frontmatter ~= vim.NIL then
         local fm = entry.frontmatter
         if fm.kind and fm.kind ~= vim.NIL and fm.kind ~= "" then
-          kind_badge = core.kind_badge(fm.kind)
-          kind_hl = config.kind_highlights[fm.kind:lower()] or "CueCategoryTask"
-        end
-        if fm.priority and fm.priority ~= vim.NIL and fm.priority ~= "" then
-          kind_hl = config.priority_highlights[fm.priority:lower()] or kind_hl
+          kind_word = fm.kind:lower()
+          kind_hl = config.kind_highlights[kind_word] or "CueCategoryTask"
         end
       end
       if done_no_strike_hl then
         kind_hl = done_no_strike_hl
       end
-      table.insert(cols, { kind_badge, kind_hl })
+      table.insert(cols, { kind_word, kind_hl })
+
+      -- Priority column: Jira-style caret glyph for critical/high only
+      -- (operator decision: normal is the norm, low is rare clutter --
+      -- both render blank). Color carries the priority, kind no longer
+      -- does.
+      local prio_glyph = ""
+      local prio_hl = "TelescopeResultsNormal"
+      if entry.frontmatter and entry.frontmatter ~= vim.NIL then
+        local fm = entry.frontmatter
+        if fm.priority and fm.priority ~= vim.NIL and fm.priority ~= "" then
+          local prio = fm.priority:lower()
+          prio_glyph = config.PRIORITY_GLYPH[prio] or ""
+          if prio_glyph ~= "" then
+            prio_hl = config.priority_highlights[prio] or prio_hl
+          end
+        end
+      end
+      if done_no_strike_hl then
+        prio_hl = done_no_strike_hl
+      end
+      table.insert(cols, { prio_glyph, prio_hl })
 
       table.insert(cols, { display_name, highlight })
 
@@ -229,8 +249,8 @@ local function make_mem_entry_maker(opts)
         end
       end
       table.insert(cols, { parent_display, meta_hl })
-
-      table.insert(cols, { hash_display, meta_hl })
+      -- No hash column: task cards never carry content hashes (hash is
+      -- null on every master card); the trailing space belongs to slug.
     else
       local cat_hl = done_no_strike_hl or get_category_highlight(entry.category)
       local meta_hl = done_no_strike_hl or "TelescopeResultsComment"

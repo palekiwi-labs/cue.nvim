@@ -64,21 +64,6 @@ function M.task_marker_for(slug, status, active_slug)
   return " "
 end
 
---- 3-char uppercase display badge for a task kind (see config.KIND_ABBREV).
---- Display-only; frontmatter keeps the full kind string. Missing/empty kind
---- returns "TSK"; unknown kinds abbreviate to their first 3 uppercase chars
---- so they stay visible and the badge column never overflows.
----
---- Kept pure (no vim.* calls) so it is unit-testable without Neovim.
----@param kind string|nil  frontmatter kind (e.g. "research")
----@return string  3-char uppercase badge
-function M.kind_badge(kind)
-  if not kind or kind == "" then
-    return "TSK"
-  end
-  return config.KIND_ABBREV[kind:lower()] or kind:upper():sub(1, 3)
-end
-
 --- Normalize a task card's tags into a list of strings.
 ---
 --- Reads the optional `tag` frontmatter field, accepting either a scalar or

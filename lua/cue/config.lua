@@ -56,18 +56,6 @@ M.kind_highlights = {
   coord    = "CueKindCoord",
 }
 
--- 3-char uppercase display badges for task kinds (task picker column).
--- Display-only: frontmatter keeps the full kind. Unknown kinds abbreviate
--- to their first 3 uppercase chars; a missing kind shows "TSK".
-M.KIND_ABBREV = {
-  research = "RES",
-  design   = "DES",
-  build    = "BLD",
-  review   = "REV",
-  coord    = "COR",
-  learn    = "LRN",
-}
-
 -- Status values hidden from the task BOARD picker (<C-t>). Operator
 -- decision 2026-08-22: closed cards are archive noise and "inbox" is an
 -- idea-intake status with a dedicated picker (<space>ei). Applied ONLY
