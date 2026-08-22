@@ -452,6 +452,23 @@ function M.pick_artifacts(opts)
     previewer = conf.file_previewer({})
   end
 
+  -- Task picker: stack the layout (vertical strategy, mirrored) so the
+  -- preview becomes a full-width band below the results. Task rows are wide
+  -- (marker, kind, title, tag, slug, parent, hash); a side-by-side preview
+  -- would steal width and cut the trailing columns off. Unspecified keys
+  -- (width, height, preview_cutoff) inherit the global telescope config.
+  local layout_strategy, layout_config
+  if opts.type == "task" then
+    layout_strategy = "vertical"
+    layout_config = {
+      vertical = {
+        mirror = true,        -- preview below the prompt/results block
+        prompt_position = "top",
+        preview_height = 0.5, -- even split: task list above, preview below
+      },
+    }
+  end
+
   pickers.new({}, {
     prompt_title = prompt_title,
     default_text = opts.default_text,
@@ -459,8 +476,10 @@ function M.pick_artifacts(opts)
       results     = artifacts,
       entry_maker = make_mem_entry_maker(opts),
     }),
-    sorter    = conf.generic_sorter({}),
-    previewer = previewer,
+    sorter          = conf.generic_sorter({}),
+    previewer       = previewer,
+    layout_strategy = layout_strategy,
+    layout_config   = layout_config,
     attach_mappings = function(prompt_bufnr, map)
       actions.select_default:replace(function()
         actions.close(prompt_bufnr)
