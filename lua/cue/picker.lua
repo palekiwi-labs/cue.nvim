@@ -77,12 +77,14 @@ local function get_category_highlight(category)
   return config.category_highlights[category] or "TelescopeResultsNormal"
 end
 
---- Marker character for a task card. Resolves the slug from the entry's
+--- Marker glyph for a task card. Resolves the slug from the entry's
 --- filename stem and delegates to core.task_marker_for, so display and
---- sort share a single source of truth.
+--- sort share a single source of truth; the sentinel marker is then
+--- translated to a Nerd Font glyph (config.MARKER_GLYPH) for display
+--- only -- sorting keeps comparing the raw sentinels.
 ---@param entry table
 ---@param active_task string|nil
----@return string marker, string highlight
+---@return string marker_glyph, string highlight
 local function entry_marker(entry, active_task)
   local slug = vim.fn.fnamemodify(entry.name, ":r")
   local status = nil
@@ -96,7 +98,8 @@ local function entry_marker(entry, active_task)
   elseif marker == "!" then
     hl = "CueMarkerInProgress"
   end
-  return marker, hl
+  -- " " (no marker) passes through unmapped.
+  return config.MARKER_GLYPH[marker] or marker, hl
 end
 
 --- Normalized tag list for an entry (see core.task_tags). Shared by the

@@ -77,6 +77,20 @@ M.PRIORITY_GLYPH = {
   high     = "\xEF\x84\x86",
 }
 
+-- Nerd Font glyphs for the task picker marker column (single-width).
+-- Display-only translation of the internal sentinel markers returned
+-- by core.task_marker_for; sorting still compares the sentinels
+-- ("*" active, "!" in-progress, " " none), so this map never affects
+-- ordering. Same FontAwesome range as the priority carets, chosen for
+-- distinct silhouettes: star (active) vs circle-arrows (in-progress)
+-- vs carets (priority).
+--   "*" active        U+F005 star     (cyan)
+--   "!" in-progress   U+F021 refresh  (yellow)
+M.MARKER_GLYPH = {
+  ["*"] = "\xEF\x80\x85",
+  ["!"] = "\xEF\x80\xA1",
+}
+
 M.priority_highlights = {
   critical = "CuePriorityCritical",
   high     = "CuePriorityHigh",
