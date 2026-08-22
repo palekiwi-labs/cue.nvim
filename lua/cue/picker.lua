@@ -602,6 +602,21 @@ function M.pick_artifacts(opts)
   }):find()
 end
 
+--- Open the artifact picker scoped to the ACTIVE task's context.
+---
+--- Resolves the active task via `cue status --json` (core.get_active_task)
+--- and delegates the scope decision to core.task_scope_for. Notifies when
+--- the global (master) context is active, since it has no task scope; use
+--- pick_artifacts() to follow the current scope unconditionally.
+function M.pick_active_task_artifacts()
+  local decision = core.task_scope_for(core.get_active_task())
+  if decision.action == "notify" then
+    vim.notify(decision.message, vim.log.levels.WARN)
+    return
+  end
+  return M.pick_artifacts({ task = decision.task })
+end
+
 --- Open a Telescope picker for all cue context files
 function M.pick_context()
   local output, err = core.execute_command({ 'cue', 'context', 'path', '--all' })

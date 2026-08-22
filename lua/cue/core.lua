@@ -410,6 +410,29 @@ function M.resolve_active_task_path(status)
   return { action = "open", path = ".cue/master/task/" .. status.context .. ".md" }
 end
 
+--- Pure decision helper for pick_active_task_artifacts() (cue.picker).
+---
+--- Given the status object returned by get_active_task() (which wraps
+--- `cue status --json`), decide which task scope a picker should be
+--- scoped to:
+---   { action = "pick",   task = "<slug>" }
+---   { action = "notify", message = "..." }
+---
+--- The global (master) context has no task scope, so it resolves to a
+--- notify decision. Delegates the master/nil checks to
+--- resolve_active_task_path so the two helpers can never disagree about
+--- what counts as "no active task".
+--- Kept free of side effects so it can be unit-tested without Neovim.
+---@param status table|nil  { context, global, ... } from get_active_task()
+---@return table
+function M.task_scope_for(status)
+  local decision = M.resolve_active_task_path(status)
+  if decision.action == "notify" then
+    return decision
+  end
+  return { action = "pick", task = status.context }
+end
+
 --- Open the active task card in a new buffer.
 ---
 --- Resolves the active context via `cue status --json`. When a task slug is

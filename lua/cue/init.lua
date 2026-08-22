@@ -93,6 +93,12 @@ function M.pick_artifacts(opts)
   return require('cue.picker').pick_artifacts(opts)
 end
 
+--- Open Telescope artifact picker scoped to the active task's context.
+--- Notifies when the global (master) context is active (no task scope).
+function M.pick_active_task_artifacts()
+  return require('cue.picker').pick_active_task_artifacts()
+end
+
 --- Open Telescope context file picker
 function M.pick_context()
   return require('cue.picker').pick_context()
