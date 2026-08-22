@@ -48,8 +48,10 @@ function M.setup()
   vim.api.nvim_set_hl(0, "CuePriorityNormal", { fg = COLORS.cyan, bold = false })
   vim.api.nvim_set_hl(0, "CuePriorityLow", { fg = COLORS.grey, bold = false })
 
-  -- Tag column in the task picker (#first-tag)
-  vim.api.nvim_set_hl(0, "CueTag", { fg = COLORS.purple, bold = false })
+  -- Tag column in the task picker (#first-tag). Cyan, matching the
+  -- default "task" kind color: tags read as generic task metadata,
+  -- not a kind or priority signal.
+  vim.api.nvim_set_hl(0, "CueTag", { fg = COLORS.cyan, bold = false })
 end
 
 return M
