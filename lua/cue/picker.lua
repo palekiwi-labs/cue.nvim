@@ -660,6 +660,14 @@ function M.pick_artifacts(opts)
   }):find()
 end
 
+--- Open a picker over the INBOX: task cards with status "inbox"
+--- (operator's idea-intake status). Positive status filter via
+--- opts.status, so the picker lists only inbox cards and the prompt
+--- title reflects it.
+function M.pick_inbox_tasks()
+  return M.pick_artifacts({ type = "task", task = "master", status = "inbox" })
+end
+
 --- Open the artifact picker scoped to the ACTIVE task's context.
 ---
 --- Resolves the active task via `cue status --json` (core.get_active_task)

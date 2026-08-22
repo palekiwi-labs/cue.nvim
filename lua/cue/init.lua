@@ -93,6 +93,11 @@ function M.pick_artifacts(opts)
   return require('cue.picker').pick_artifacts(opts)
 end
 
+--- Open a picker over inbox task cards (status "inbox").
+function M.pick_inbox_tasks()
+  return require('cue.picker').pick_inbox_tasks()
+end
+
 --- Open Telescope artifact picker scoped to the active task's context.
 --- Notifies when the global (master) context is active (no task scope).
 function M.pick_active_task_artifacts()
