@@ -64,6 +64,64 @@ function M.task_marker_for(slug, status, active_slug)
   return " "
 end
 
+--- 3-char uppercase display badge for a task kind (see config.KIND_ABBREV).
+--- Display-only; frontmatter keeps the full kind string. Missing/empty kind
+--- returns "TSK"; unknown kinds abbreviate to their first 3 uppercase chars
+--- so they stay visible and the badge column never overflows.
+---
+--- Kept pure (no vim.* calls) so it is unit-testable without Neovim.
+---@param kind string|nil  frontmatter kind (e.g. "research")
+---@return string  3-char uppercase badge
+function M.kind_badge(kind)
+  if not kind or kind == "" then
+    return "TSK"
+  end
+  return config.KIND_ABBREV[kind:lower()] or kind:upper():sub(1, 3)
+end
+
+--- Normalize a task card's tags into a list of strings.
+---
+--- Reads the optional `tag` frontmatter field, accepting either a scalar or
+--- a list (mirroring how `branch:` works). `tags` is accepted as a lenient
+--- alias when `tag` is absent. Empty strings and non-string entries are
+--- dropped; a non-string, non-table scalar yields an empty list.
+---
+--- The task picker displays only the first tag; the ordinal search indexes
+--- all of them (see picker.make_mem_entry_maker).
+---
+--- Kept pure (no vim.* calls beyond the NIL sentinel comparison) so it is
+--- unit-testable without Neovim.
+---@param fm table|nil  parsed frontmatter (may be vim.NIL)
+---@return table  ordered list of tag strings (never nil)
+function M.task_tags(fm)
+  if not fm or fm == vim.NIL then
+    return {}
+  end
+  local raw = fm.tag
+  if raw == nil or raw == vim.NIL then
+    raw = fm.tags
+  end
+  if raw == nil or raw == vim.NIL then
+    return {}
+  end
+  if type(raw) == "string" then
+    if raw == "" then
+      return {}
+    end
+    return { raw }
+  end
+  if type(raw) == "table" then
+    local tags = {}
+    for _, v in ipairs(raw) do
+      if type(v) == "string" and v ~= "" then
+        table.insert(tags, v)
+      end
+    end
+    return tags
+  end
+  return {}
+end
+
 -- Numeric sort rank for a marker: "*" (0) < "!" (1) < " " (2).
 local function marker_rank(marker)
   if marker == "*" then return 0 end

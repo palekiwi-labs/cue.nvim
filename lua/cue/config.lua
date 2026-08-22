@@ -56,6 +56,18 @@ M.kind_highlights = {
   coord    = "CueKindCoord",
 }
 
+-- 3-char uppercase display badges for task kinds (task picker column).
+-- Display-only: frontmatter keeps the full kind. Unknown kinds abbreviate
+-- to their first 3 uppercase chars; a missing kind shows "TSK".
+M.KIND_ABBREV = {
+  research = "RES",
+  design   = "DES",
+  build    = "BLD",
+  review   = "REV",
+  coord    = "COR",
+  learn    = "LRN",
+}
+
 M.priority_highlights = {
   critical = "CuePriorityCritical",
   high     = "CuePriorityHigh",

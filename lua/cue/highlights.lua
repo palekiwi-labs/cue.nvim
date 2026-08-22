@@ -47,6 +47,9 @@ function M.setup()
   vim.api.nvim_set_hl(0, "CuePriorityHigh", { fg = COLORS.orange, bold = false })
   vim.api.nvim_set_hl(0, "CuePriorityNormal", { fg = COLORS.cyan, bold = false })
   vim.api.nvim_set_hl(0, "CuePriorityLow", { fg = COLORS.grey, bold = false })
+
+  -- Tag column in the task picker (#first-tag)
+  vim.api.nvim_set_hl(0, "CueTag", { fg = COLORS.purple, bold = false })
 end
 
 return M

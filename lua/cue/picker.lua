@@ -99,6 +99,14 @@ local function entry_marker(entry, active_task)
   return marker, hl
 end
 
+--- Normalized tag list for an entry (see core.task_tags). Shared by the
+--- display (first tag) and the search ordinal (all tags).
+---@param entry table
+---@return table
+local function entry_tags(entry)
+  return core.task_tags(entry.frontmatter)
+end
+
 --- List selectable scopes via core.list_scopes() (task-card slugs, always
 --- including "master"). Thin wrapper so the three call sites below share a
 --- single source of truth with core.confirm_scope.
@@ -125,8 +133,9 @@ local function make_mem_entry_maker(opts)
       separator = " ",
       items = {
         { width = 1 },        -- active-task marker ("*" or " ")
-        { width = 55 },       -- filename / title
-        { width = 8 },        -- kind badge (build, design, research, review, coord)
+        { width = 3 },        -- kind badge (RES, DES, BLD, REV, COR)
+        { width = 60 },       -- filename / title
+        { width = 12 },       -- tag (#first-tag; all tags searchable)
         { width = 25 },       -- task slug
         { width = 20 },       -- parent link (^ parent-slug)
         { remaining = true }, -- hash
@@ -178,14 +187,14 @@ local function make_mem_entry_maker(opts)
       local marker, marker_hl = entry_marker(entry, active_task)
       table.insert(cols, { marker, marker_hl })
 
-      table.insert(cols, { display_name, highlight })
-
-      local kind_badge = "task"
+      -- Kind badge (3-char uppercase) directly after the marker so kinds
+      -- form an aligned column for quick visual filtering by kind.
+      local kind_badge = core.kind_badge(nil) -- missing kind -> "TSK"
       local kind_hl = "CueCategoryTask"
       if entry.frontmatter and entry.frontmatter ~= vim.NIL then
         local fm = entry.frontmatter
         if fm.kind and fm.kind ~= vim.NIL and fm.kind ~= "" then
-          kind_badge = fm.kind:lower()
+          kind_badge = core.kind_badge(fm.kind)
           kind_hl = config.kind_highlights[fm.kind:lower()] or "CueCategoryTask"
         end
         if fm.priority and fm.priority ~= vim.NIL and fm.priority ~= "" then
@@ -196,6 +205,16 @@ local function make_mem_entry_maker(opts)
         kind_hl = done_no_strike_hl
       end
       table.insert(cols, { kind_badge, kind_hl })
+
+      table.insert(cols, { display_name, highlight })
+
+      -- Tag column: first tag only, "#" prefixed. All tags feed the search
+      -- ordinal (see below), so filtering by any tag still works even when
+      -- it is not the displayed one.
+      local tags = entry_tags(entry)
+      local tag_display = tags[1] and ("#" .. tags[1]) or ""
+      local tag_hl = done_no_strike_hl or "CueTag"
+      table.insert(cols, { tag_display, tag_hl })
 
       local meta_hl = done_no_strike_hl or "TelescopeResultsComment"
 
@@ -252,6 +271,12 @@ local function make_mem_entry_maker(opts)
       if fm.parent and fm.parent ~= vim.NIL then
         fm_search = fm_search .. " ^ " .. fm.parent .. " " .. fm.parent
       end
+    end
+
+    -- All tags (not just the displayed first one) feed the fuzzy ordinal,
+    -- so typing any tag name filters tasks by that tag.
+    for _, tag in ipairs(entry_tags(entry)) do
+      fm_search = fm_search .. " " .. tag
     end
 
     local ordinal = string.format("%s %s %s %s%s",
