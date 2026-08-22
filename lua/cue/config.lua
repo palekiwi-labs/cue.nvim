@@ -68,6 +68,27 @@ M.KIND_ABBREV = {
   learn    = "LRN",
 }
 
+-- Status values hidden from the task BOARD picker (<C-t>). Operator
+-- decision 2026-08-22: closed cards are archive noise and "inbox" is an
+-- idea-intake status with a dedicated picker (<space>ei). Applied ONLY
+-- when opts.board is set -- other task pickers (<space>et, <C-f>
+-- drill-in, all-scopes) still list every status.
+M.HIDDEN_TASK_STATUSES = {
+  closed = true,
+  inbox  = true,
+}
+
+-- Nerd Font glyphs for the task picker priority column (single-width
+-- carets, Jira-style). Operator decision 2026-08-22: flag ONLY critical
+-- and high; normal is the norm and low is rare clutter, so they render
+-- blank. Byte sequences are UTF-8 encodings of the codepoints:
+--   critical  U+F102 angle-double-up (red)
+--   high      U+F106 angle-up        (orange)
+M.PRIORITY_GLYPH = {
+  critical = "\xEF\x84\x82",
+  high     = "\xEF\x84\x86",
+}
+
 M.priority_highlights = {
   critical = "CuePriorityCritical",
   high     = "CuePriorityHigh",

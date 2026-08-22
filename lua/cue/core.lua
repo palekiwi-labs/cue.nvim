@@ -122,6 +122,53 @@ function M.task_tags(fm)
   return {}
 end
 
+--- Pure status-filter decision for the task picker (see
+--- picker.pick_artifacts).
+---
+---   opts.status set (positive filter, e.g. the inbox picker) -> keep
+---     ONLY entries whose status equals it. A missing status is
+---     excluded: an inbox picker must not leak status-less cards.
+---   else opts.board set (the <C-t> board) -> hide statuses listed in
+---     config.HIDDEN_TASK_STATUSES (closed, inbox). A missing status
+---     stays visible.
+---   neither -> nothing excluded.
+---
+--- Nil/vim.NIL frontmatter never excludes (missing metadata is not a
+--- reason to hide a card). Kept pure (no vim.* calls beyond the NIL
+--- sentinel comparison) so it is unit-testable without Neovim.
+---@param fm table|nil  parsed frontmatter (may be vim.NIL)
+---@param opts table|nil  supports: status (string), board (bool)
+---@return boolean  true when the entry should be filtered out
+function M.task_status_excluded(fm, opts)
+  opts = opts or {}
+  if not fm or fm == vim.NIL then
+    return false
+  end
+  local status = fm.status
+  if status == vim.NIL then
+    status = nil
+  end
+  if opts.status then
+    return status ~= opts.status
+  end
+  if opts.board and status then
+    return config.HIDDEN_TASK_STATUSES[status:lower()] == true
+  end
+  return false
+end
+
+--- Pure type-filter decision for pickers: true when the artifact
+--- category matches opts.exclude_type. Backs the <A-t> master-scope
+--- mapping, which historically passed an exclude_type kwarg that was
+--- never implemented (see todo fix-exclude-type-option.md).
+---@param category string
+---@param opts table|nil  supports: exclude_type (string)
+---@return boolean
+function M.type_excluded(category, opts)
+  local exclude = opts and opts.exclude_type
+  return exclude ~= nil and category == exclude
+end
+
 -- Numeric sort rank for a marker: "*" (0) < "!" (1) < " " (2).
 local function marker_rank(marker)
   if marker == "*" then return 0 end
