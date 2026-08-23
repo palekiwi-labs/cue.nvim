@@ -4,6 +4,9 @@
 -- Pure filter decisions behind the task picker (see picker.pick_artifacts).
 --
 -- task_status_excluded(fm, opts):
+--   opts.statuses set (list positive filter, e.g. done picker) -> keep
+--   ONLY entries whose status is in the list; everything else
+--   (including a missing status) is excluded.
 --   opts.status set (positive filter, e.g. inbox picker) -> keep ONLY
 --   entries whose status equals it; everything else (including a
 --   missing status) is excluded.
@@ -85,6 +88,47 @@ check("status filter wins over board", function()
 	-- nonsense today, but the precedence must be deterministic: the
 	-- positive filter is the more specific constraint.
 	assert(not core.task_status_excluded(fm("closed"), { board = true, status = "closed" }), "positive filter wins")
+end)
+
+-- ─── task_status_excluded: list positive filter (done picker) ────────
+
+check("statuses filter keeps listed statuses only", function()
+	local opts = { statuses = { "complete", "closed" } }
+	assert(not core.task_status_excluded(fm("complete"), opts), "complete kept in done picker")
+	assert(not core.task_status_excluded(fm("closed"), opts), "closed kept in done picker")
+end)
+
+check("statuses filter excludes unlisted statuses", function()
+	local opts = { statuses = { "complete", "closed" } }
+	assert(core.task_status_excluded(fm("open"), opts), "open excluded from done picker")
+	assert(core.task_status_excluded(fm("in-progress"), opts), "in-progress excluded from done picker")
+	assert(core.task_status_excluded(fm("inbox"), opts), "inbox excluded from done picker")
+end)
+
+check("statuses filter excludes missing status", function()
+	assert(core.task_status_excluded({}, { statuses = { "complete" } }), "missing status excluded from done picker")
+end)
+
+check("statuses filter is case-insensitive", function()
+	assert(not core.task_status_excluded(fm("Complete"), { statuses = { "complete" } }), "Complete kept")
+	local opts = { statuses = { "Closed" } }
+	assert(not core.task_status_excluded(fm("closed"), opts), "closed kept via capitalised list value")
+end)
+
+check("empty statuses list excludes everything", function()
+	assert(core.task_status_excluded(fm("complete"), { statuses = {} }), "empty list must not match")
+end)
+
+check("statuses filter wins over board", function()
+	local opts = { board = true, statuses = { "complete", "closed" } }
+	assert(not core.task_status_excluded(fm("complete"), opts), "positive list filter wins over board hiding")
+	assert(not core.task_status_excluded(fm("closed"), opts), "closed kept when explicitly listed")
+end)
+
+check("statuses filter wins over single status filter", function()
+	local opts = { status = "inbox", statuses = { "complete", "closed" } }
+	assert(not core.task_status_excluded(fm("complete"), opts), "list filter is the more specific constraint")
+	assert(core.task_status_excluded(fm("inbox"), opts), "inbox not in the list")
 end)
 
 -- ─── task_status_excluded: no opts ────────────────────────────────────

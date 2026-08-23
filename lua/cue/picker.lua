@@ -325,11 +325,12 @@ end
 ---
 --- exclude_type (client-side negative type filter; no cue list CLI
 --- equivalent exists) applies to every picker. Status filters apply to
---- task-type pickers only: opts.status is a positive filter (inbox
---- picker), opts.board hides config.HIDDEN_TASK_STATUSES (C-t board).
---- Both decisions live in pure core helpers under unit test.
+--- task-type pickers only: opts.status/opts.statuses are positive
+--- filters (inbox/done pickers), opts.board hides config.
+--- HIDDEN_TASK_STATUSES (C-t board). All decisions live in pure core
+--- helpers under unit test.
 ---@param artifacts table
----@param opts table|nil  supports: exclude_type, status, board, type
+---@param opts table|nil  supports: exclude_type, status, statuses, board, type
 ---@return table
 local function filter_artifacts(artifacts, opts)
   opts = opts or {}
@@ -504,6 +505,12 @@ function M.pick_artifacts(opts)
   end
   if opts.status then
     prompt_title = prompt_title .. " [" .. opts.status:upper() .. "]"
+  elseif opts.statuses then
+    local names = {}
+    for _, s in ipairs(opts.statuses) do
+      table.insert(names, s:upper())
+    end
+    prompt_title = prompt_title .. " [" .. table.concat(names, "/") .. "]"
   end
 
   local previewer
@@ -669,6 +676,19 @@ end
 --- title reflects it.
 function M.pick_inbox_tasks()
   return M.pick_artifacts({ type = "task", task = "master", status = "inbox" })
+end
+
+--- Open a picker over DONE task cards: statuses "complete" and
+--- "closed" (config.DONE_STATUSES). List-based positive filter via
+--- opts.statuses, mirroring pick_inbox_tasks. Counterpart of the
+--- <C-t> board, which hides these statuses (config.
+--- HIDDEN_TASK_STATUSES).
+function M.pick_done_tasks()
+  return M.pick_artifacts({
+    type = "task",
+    task = "master",
+    statuses = { "complete", "closed" },
+  })
 end
 
 --- Open the artifact picker scoped to the ACTIVE task's context.

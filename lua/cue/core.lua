@@ -110,28 +110,50 @@ end
 --- Pure status-filter decision for the task picker (see
 --- picker.pick_artifacts).
 ---
----   opts.status set (positive filter, e.g. the inbox picker) -> keep
----     ONLY entries whose status equals it. A missing status is
+---   opts.statuses set (list positive filter, e.g. the done picker) ->
+---     keep ONLY entries whose status is in the list (case-insensitive).
+---     A missing status is excluded: a done picker must not leak
+---     status-less cards.
+---   else opts.status set (positive filter, e.g. the inbox picker) ->
+---     keep ONLY entries whose status equals it. A missing status is
 ---     excluded: an inbox picker must not leak status-less cards.
 ---   else opts.board set (the <C-t> board) -> hide statuses listed in
----     config.HIDDEN_TASK_STATUSES (closed, inbox). A missing status
----     stays visible.
+---     config.HIDDEN_TASK_STATUSES (complete, closed, inbox). A missing
+---     status stays visible.
 ---   neither -> nothing excluded.
 ---
---- Nil/vim.NIL frontmatter never excludes (missing metadata is not a
---- reason to hide a card). Kept pure (no vim.* calls beyond the NIL
---- sentinel comparison) so it is unit-testable without Neovim.
+--- Nil/vim.NIL frontmatter never excludes via the board path (missing
+--- metadata is not a reason to hide a card); the positive filters DO
+--- exclude it (a card without status cannot match a requested one).
+--- Kept pure (no vim.* calls beyond the NIL sentinel comparison) so it
+--- is unit-testable without Neovim.
 ---@param fm table|nil  parsed frontmatter (may be vim.NIL)
----@param opts table|nil  supports: status (string), board (bool)
+---@param opts table|nil  supports: statuses (table), status (string), board (bool)
 ---@return boolean  true when the entry should be filtered out
 function M.task_status_excluded(fm, opts)
   opts = opts or {}
   if not fm or fm == vim.NIL then
-    return false
+    -- Positive filters still exclude: no status cannot match a
+    -- requested one. The board path keeps missing metadata visible.
+    return opts.statuses ~= nil or opts.status ~= nil
   end
   local status = fm.status
   if status == vim.NIL then
     status = nil
+  end
+  if opts.statuses then
+    -- List-based positive filter (done picker). Case-insensitive both
+    -- ways: frontmatter casing is not guaranteed.
+    if not status then
+      return true
+    end
+    local s = status:lower()
+    for _, wanted in ipairs(opts.statuses) do
+      if type(wanted) == "string" and s == wanted:lower() then
+        return false
+      end
+    end
+    return true
   end
   if opts.status then
     return status ~= opts.status

@@ -98,6 +98,11 @@ function M.pick_inbox_tasks()
   return require('cue.picker').pick_inbox_tasks()
 end
 
+--- Open a picker over done task cards (status "complete" or "closed").
+function M.pick_done_tasks()
+  return require('cue.picker').pick_done_tasks()
+end
+
 --- Open Telescope artifact picker scoped to the active task's context.
 --- Notifies when the global (master) context is active (no task scope).
 function M.pick_active_task_artifacts()
