@@ -8,8 +8,8 @@
 --   entries whose status equals it; everything else (including a
 --   missing status) is excluded.
 --   opts.board set (<C-t> board) -> hide statuses listed in
---   config.HIDDEN_TASK_STATUSES (closed, inbox). Missing status stays
---   visible.
+--   config.HIDDEN_TASK_STATUSES (complete, closed, inbox). Missing
+--   status stays visible.
 --   neither opt -> nothing excluded.
 --
 -- type_excluded(category, opts):
@@ -57,8 +57,8 @@ check("board keeps in-progress", function()
 	assert(not core.task_status_excluded(fm("in-progress"), { board = true }), "in-progress should stay visible")
 end)
 
-check("board keeps complete (finished but not hidden)", function()
-	assert(not core.task_status_excluded(fm("complete"), { board = true }), "complete should stay visible")
+check("board hides complete", function()
+	assert(core.task_status_excluded(fm("complete"), { board = true }), "complete should be hidden")
 end)
 
 check("board status match is case-insensitive", function()

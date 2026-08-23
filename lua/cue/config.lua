@@ -57,13 +57,15 @@ M.kind_highlights = {
 }
 
 -- Status values hidden from the task BOARD picker (<C-t>). Operator
--- decision 2026-08-22: closed cards are archive noise and "inbox" is an
+-- decisions 2026-08-22 and 2026-08-23: complete and closed cards are
+-- archive noise (dedicated done picker: <space>ec) and "inbox" is an
 -- idea-intake status with a dedicated picker (<space>ei). Applied ONLY
 -- when opts.board is set -- other task pickers (<space>et, <C-f>
 -- drill-in, all-scopes) still list every status.
 M.HIDDEN_TASK_STATUSES = {
-  closed = true,
-  inbox  = true,
+  complete = true,
+  closed   = true,
+  inbox    = true,
 }
 
 -- Nerd Font glyphs for the task picker priority column (single-width
