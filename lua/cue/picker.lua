@@ -618,9 +618,8 @@ function M.pick_artifacts(opts)
           slug = entry.branch
         end
         if not slug or slug == "" then return end
-        -- Central switch path: core.switch_context is the only site that
-        -- shells `cue switch` (which also maintains the branch-to-task
-        -- association in git config).
+        -- Central switch path: all context switches funnel through
+        -- core.switch_context.
         core.switch_context(slug)
         actions.close(prompt_bufnr)
       end)

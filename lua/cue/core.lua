@@ -508,10 +508,8 @@ function M.open_active_task()
   vim.cmd.edit(decision.path)
 end
 
---- Switch the active cue context to the given task slug.
---- Calls `cue switch <slug>`, which also maintains the branch-to-task
---- association in git config (branch.<name>.cue-task) so checkouts can
---- auto-switch back. Switching to "master" clears the association.
+--- Switch the active cue context. `cue switch` also maintains the
+--- branch-to-task association in git config.
 ---@param slug string  task slug or "master"
 function M.switch_context(slug)
   local obj = vim.system({ 'cue', 'switch', slug }, { text = true }):wait()
