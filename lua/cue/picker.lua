@@ -618,13 +618,9 @@ function M.pick_artifacts(opts)
           slug = entry.branch
         end
         if not slug or slug == "" then return end
-        local obj = vim.system({ 'cue', 'switch', slug }, { text = true }):wait()
-        if obj.code == 0 then
-          vim.notify("Switched to task: " .. slug, vim.log.levels.INFO)
-        else
-          local msg = vim.trim((obj.stderr or "") ~= "" and obj.stderr or (obj.stdout or "unknown"))
-          vim.notify("cue switch failed: " .. msg, vim.log.levels.ERROR)
-        end
+        -- Central switch path: core.switch_context also mirrors the
+        -- branch-to-task association into git config (git-cue-sync set).
+        core.switch_context(slug)
         actions.close(prompt_bufnr)
       end)
 
