@@ -508,29 +508,15 @@ function M.open_active_task()
   vim.cmd.edit(decision.path)
 end
 
---- Best-effort write of the branch-to-task association for the current
---- branch. Silent no-op when git-cue-sync is not on PATH or the write
---- fails (e.g. detached HEAD, not a git repo).
----@param slug string  task slug; "master" or empty clears
-local function associate_branch_task(slug)
-  if vim.fn.executable('git-cue-sync') ~= 1 then
-    return
-  end
-  vim.system({ 'git-cue-sync', 'set', slug }, { text = true }):wait()
-end
-
 --- Switch the active cue context to the given task slug.
---- Calls `cue switch <slug>`, then mirrors the association into the
---- branch's git config via `git-cue-sync set <slug>` so checkouts can
---- auto-switch back (branch.<name>.cue-task). Switching to "master"
---- clears the association. The association write is best-effort: it is
---- skipped silently when git-cue-sync is unavailable.
+--- Calls `cue switch <slug>`, which also maintains the branch-to-task
+--- association in git config (branch.<name>.cue-task) so checkouts can
+--- auto-switch back. Switching to "master" clears the association.
 ---@param slug string  task slug or "master"
 function M.switch_context(slug)
   local obj = vim.system({ 'cue', 'switch', slug }, { text = true }):wait()
   if obj.code == 0 then
     vim.notify("cue: switched to " .. slug, vim.log.levels.INFO)
-    associate_branch_task(slug)
   else
     local msg = vim.trim((obj.stderr or "") ~= "" and obj.stderr or (obj.stdout or "unknown"))
     vim.notify("cue switch failed: " .. msg, vim.log.levels.ERROR)
