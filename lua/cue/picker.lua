@@ -138,10 +138,9 @@ local function make_mem_entry_maker(opts)
         { width = 1 },        -- active-task marker ("*" or " ")
         { width = 9 },        -- kind (full word; "research" is the longest)
         { width = 1 },        -- priority caret (critical/high only)
-        { width = 60 },       -- filename / title
+        { width = 70 },       -- filename / title
         { width = 12 },       -- tag (#first-tag; all tags searchable)
         { remaining = true }, -- task slug (absorbs all spare width)
-        { width = 20 },       -- parent link (^ parent-slug)
       },
     }
   else
@@ -243,17 +242,11 @@ local function make_mem_entry_maker(opts)
 
       local task_slug = vim.fn.fnamemodify(entry.name, ":t:r")
       table.insert(cols, { task_slug, meta_hl })
-
-      local parent_display = ""
-      if entry.frontmatter and entry.frontmatter ~= vim.NIL then
-        local fm = entry.frontmatter
-        if fm.parent and fm.parent ~= vim.NIL and fm.parent ~= "" then
-          parent_display = "^ " .. fm.parent
-        end
-      end
-      table.insert(cols, { parent_display, meta_hl })
-      -- No hash column: task cards never carry content hashes (hash is
-      -- null on every master card); the trailing space belongs to slug.
+      -- No parent column (operator 2026-08-24: space-hungry and confusing;
+      -- parent stays searchable via the "^ slug" ordinal token and
+      -- jumpable via <A-p>). No hash column: task cards never carry
+      -- content hashes (hash is null on every master card); the trailing
+      -- space belongs to slug.
     else
       local cat_hl = done_no_strike_hl or get_category_highlight(entry.category)
       local meta_hl = done_no_strike_hl or "TelescopeResultsComment"
@@ -522,7 +515,7 @@ function M.pick_artifacts(opts)
 
   -- Task picker: stack the layout (vertical strategy, mirrored) so the
   -- preview becomes a full-width band below the results. Task rows are wide
-  -- (marker, kind, title, tag, slug, parent, hash); a side-by-side preview
+  -- (marker, kind, title, tag, slug); a side-by-side preview
   -- would steal width and cut the trailing columns off. Unspecified keys
   -- (width, height, preview_cutoff) inherit the global telescope config.
   local layout_strategy, layout_config
