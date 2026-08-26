@@ -163,20 +163,28 @@ local function make_mem_entry_maker(opts)
 
     local display_name = utils.transform_path(opts, entry.name)
     local highlight    = "TelescopeResultsNormal"
+    local done_hl      = nil
+
+    -- Grey dimming of finished cards is a scanning aid for MIXED lists
+    -- (<C-s> etc.); pickers listing only done cards (pick_done_tasks)
+    -- pass dim_done=false and render normal colors (operator 2026-08-26).
+    local dim_done = opts.dim_done ~= false
 
     if entry.frontmatter and entry.frontmatter ~= vim.NIL then
       local fm = entry.frontmatter
       if fm.title and fm.title ~= vim.NIL and fm.title ~= "" then
         display_name = fm.title
       end
-      -- closed -> strikethrough title (normal colors otherwise);
-      -- complete -> no override at all (operator 2026-08-26: grey
-      -- row-wide dimming was hard to read).
-      local done_hl = core.done_highlight_for(fm.status)
+      done_hl = core.done_highlight_for(fm.status, dim_done)
       if done_hl then
         highlight = done_hl
       end
     end
+
+    -- In dim mode, strikethrough (CueStatusDone) applies ONLY to the
+    -- title; metadata columns use CueStatusComplete (grey, no
+    -- strikethrough). In no-dim mode there is no metadata override.
+    local done_no_strike_hl = (dim_done and done_hl) and "CueStatusComplete" or nil
 
     local cols = {}
     if show_marker then
@@ -199,6 +207,9 @@ local function make_mem_entry_maker(opts)
           kind_hl = config.kind_highlights[kind_word] or "CueCategoryTask"
         end
       end
+      if done_no_strike_hl then
+        kind_hl = done_no_strike_hl
+      end
       table.insert(cols, { kind_word, kind_hl })
 
       -- Priority column: Jira-style caret glyph for critical/high only
@@ -217,6 +228,9 @@ local function make_mem_entry_maker(opts)
           end
         end
       end
+      if done_no_strike_hl then
+        prio_hl = done_no_strike_hl
+      end
       table.insert(cols, { prio_glyph, prio_hl })
 
       table.insert(cols, { display_name, highlight })
@@ -226,9 +240,10 @@ local function make_mem_entry_maker(opts)
       -- it is not the displayed one.
       local tags = entry_tags(entry)
       local tag_display = tags[1] and ("#" .. tags[1]) or ""
-      table.insert(cols, { tag_display, "CueTag" })
+      local tag_hl = done_no_strike_hl or "CueTag"
+      table.insert(cols, { tag_display, tag_hl })
 
-      local meta_hl = "TelescopeResultsComment"
+      local meta_hl = done_no_strike_hl or "TelescopeResultsComment"
 
       local task_slug = vim.fn.fnamemodify(entry.name, ":t:r")
       table.insert(cols, { task_slug, meta_hl })
@@ -238,8 +253,8 @@ local function make_mem_entry_maker(opts)
       -- content hashes (hash is null on every master card); the trailing
       -- space belongs to slug.
     else
-      local cat_hl = get_category_highlight(entry.category)
-      local meta_hl = "TelescopeResultsComment"
+      local cat_hl = done_no_strike_hl or get_category_highlight(entry.category)
+      local meta_hl = done_no_strike_hl or "TelescopeResultsComment"
       table.insert(cols, { format_category(entry.category), cat_hl })
       table.insert(cols, { display_name, highlight })
       table.insert(cols, { hash_display, meta_hl })
@@ -310,8 +325,9 @@ end
 --- equivalent exists) applies to every picker. Status filters apply to
 --- task-type pickers only: opts.status/opts.statuses are positive
 --- filters (inbox/done pickers), opts.board hides config.
---- HIDDEN_TASK_STATUSES (C-t board). All decisions live in pure core
---- helpers under unit test.
+--- HIDDEN_TASK_STATUSES (C-t board). opts.dim_done (default true)
+--- toggles grey dimming of finished cards. All decisions live in pure
+--- core helpers under unit test.
 ---@param artifacts table
 ---@param opts table|nil  supports: exclude_type, status, statuses, board, type
 ---@return table
@@ -662,11 +678,16 @@ end
 --- opts.statuses, mirroring pick_inbox_tasks. Counterpart of the
 --- <C-t> board, which hides these statuses (config.
 --- HIDDEN_TASK_STATUSES).
+---
+--- dim_done=false: every card here is done, so the grey scanning aid
+--- for mixed lists would grey out the whole picker (operator
+--- 2026-08-26). Normal colors; closed titles still strike through.
 function M.pick_done_tasks()
   return M.pick_artifacts({
     type = "task",
     task = "master",
     statuses = { "complete", "closed" },
+    dim_done = false,
   })
 end
 

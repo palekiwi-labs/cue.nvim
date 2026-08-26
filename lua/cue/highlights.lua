@@ -15,10 +15,14 @@ local COLORS = {
 }
 
 function M.setup()
-  -- "closed" titles are struck through with NORMAL colors (no fg
-  -- override); "complete" gets no group at all (operator 2026-08-26:
-  -- grey row-wide dimming was hard to read).
-  vim.api.nvim_set_hl(0, "CueStatusDone", { strikethrough = true })
+  -- Finished artifacts in MIXED pickers render grey (scanning aid);
+  -- "closed" additionally strikes through while "complete" only dims.
+  -- Pickers listing only done cards pass dim_done=false and render
+  -- normal colors; "closed" titles keep a bare strikethrough there
+  -- (CueStatusClosed, operator 2026-08-26).
+  vim.api.nvim_set_hl(0, "CueStatusDone", { fg = COLORS.grey, strikethrough = true })
+  vim.api.nvim_set_hl(0, "CueStatusComplete", { fg = COLORS.grey })
+  vim.api.nvim_set_hl(0, "CueStatusClosed", { strikethrough = true })
 
   -- Width-1 task-picker markers. Bold so the symbol reads at a glance.
   vim.api.nvim_set_hl(0, "CueMarkerActive", { fg = COLORS.cyan, bold = true })

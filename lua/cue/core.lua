@@ -23,19 +23,27 @@ function M.is_finished(artifact)
   return M.is_done(artifact)
 end
 
---- Picker highlight group for a finished artifact's status:
----   closed   -> "CueStatusDone" (strikethrough, normal colors)
----   complete -> nil (normal colors, no override)
----   other    -> nil (no override)
+--- Picker highlight group for a finished artifact's status, gated by the
+--- dim_done flag:
+---   dim_done = true (default; MIXED pickers like <C-s>):
+---     closed   -> "CueStatusDone"     (grey + strikethrough)
+---     complete -> "CueStatusComplete" (grey, no strikethrough)
+---   dim_done = false (pickers listing ONLY done cards, e.g. <space>ec):
+---     closed   -> "CueStatusClosed"   (strikethrough, normal colors)
+---     complete -> nil                 (normal colors, no override)
+---   other -> nil (no override) regardless of the flag.
 ---
---- Operator decision 2026-08-26: grey row-wide dimming was hard to
---- read; done cards keep normal colors and only "closed" titles are
---- struck through.
+--- Grey is a scanning aid for mixed lists; a picker where every card is
+--- done does not need it (operator 2026-08-26).
 ---
 --- Kept pure (no vim.* calls) so it is unit-testable without Neovim.
----@param status string|nil   frontmatter status (e.g. "closed")
+---@param status string|nil    frontmatter status (e.g. "closed")
+---@param dim_done boolean|nil keep grey dimming; defaults to true
 ---@return string|nil  highlight group name, or nil when no override
-function M.done_highlight_for(status)
+function M.done_highlight_for(status, dim_done)
+  if dim_done == nil then
+    dim_done = true
+  end
   if not status or type(status) ~= "string" then
     return nil
   end
@@ -43,7 +51,10 @@ function M.done_highlight_for(status)
   if not config.DONE_STATUSES[s] then
     return nil
   end
-  return (s == "closed") and "CueStatusDone" or nil
+  if not dim_done then
+    return (s == "closed") and "CueStatusClosed" or nil
+  end
+  return (s == "closed") and "CueStatusDone" or "CueStatusComplete"
 end
 
 --- Marker character for a task card, used by the task-picker marker column
