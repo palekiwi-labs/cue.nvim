@@ -18,7 +18,10 @@ M.PRIORITY_RANK = {
 }
 
 M.TYPE_DEFAULTS = {
-  task = { status = "open", priority = "normal", kind = "build" },
+  -- Tasks enter the board as "inbox" for operator triage (dedicated
+  -- inbox picker; hidden from the board via HIDDEN_TASK_STATUSES).
+  -- Other types keep "open".
+  task = { status = "inbox", priority = "normal", kind = "build" },
   todo = { status = "open", priority = "normal" },
   plan = { status = "open", priority = "normal" },
   note = { status = "open" },

@@ -37,7 +37,9 @@ check("task plan places artifact at root with master scope", function()
 	assert(plan.opts.category == "task", "category=" .. tostring(plan.opts.category))
 	assert(plan.opts.task == "master", "task=" .. tostring(plan.opts.task))
 	assert(plan.opts.root == true, "root should be true for task")
-	assert(plan.opts.frontmatter.status == "open", "frontmatter status")
+	-- tasks enter the board as "inbox" for operator triage; other types
+	-- keep "open" (see note plan below).
+	assert(plan.opts.frontmatter.status == "inbox", "frontmatter status")
 	assert(plan.opts.frontmatter.priority == "normal", "frontmatter priority")
 	assert(plan.opts.frontmatter.kind == "build", "frontmatter default kind should be build")
 	assert(plan.opts.frontmatter.title == "Auth Login",
