@@ -163,23 +163,20 @@ local function make_mem_entry_maker(opts)
 
     local display_name = utils.transform_path(opts, entry.name)
     local highlight    = "TelescopeResultsNormal"
-    local done_hl      = nil
 
     if entry.frontmatter and entry.frontmatter ~= vim.NIL then
       local fm = entry.frontmatter
       if fm.title and fm.title ~= vim.NIL and fm.title ~= "" then
         display_name = fm.title
       end
-      -- closed -> grey + strikethrough, complete -> grey only.
-      done_hl = core.done_highlight_for(fm.status)
+      -- closed -> strikethrough title (normal colors otherwise);
+      -- complete -> no override at all (operator 2026-08-26: grey
+      -- row-wide dimming was hard to read).
+      local done_hl = core.done_highlight_for(fm.status)
       if done_hl then
         highlight = done_hl
       end
     end
-
-    -- Strikethrough (CueStatusDone) applies ONLY to title.
-    -- Non-title metadata columns use CueStatusComplete (grey, no strikethrough).
-    local done_no_strike_hl = done_hl and "CueStatusComplete" or nil
 
     local cols = {}
     if show_marker then
@@ -202,9 +199,6 @@ local function make_mem_entry_maker(opts)
           kind_hl = config.kind_highlights[kind_word] or "CueCategoryTask"
         end
       end
-      if done_no_strike_hl then
-        kind_hl = done_no_strike_hl
-      end
       table.insert(cols, { kind_word, kind_hl })
 
       -- Priority column: Jira-style caret glyph for critical/high only
@@ -223,9 +217,6 @@ local function make_mem_entry_maker(opts)
           end
         end
       end
-      if done_no_strike_hl then
-        prio_hl = done_no_strike_hl
-      end
       table.insert(cols, { prio_glyph, prio_hl })
 
       table.insert(cols, { display_name, highlight })
@@ -235,10 +226,9 @@ local function make_mem_entry_maker(opts)
       -- it is not the displayed one.
       local tags = entry_tags(entry)
       local tag_display = tags[1] and ("#" .. tags[1]) or ""
-      local tag_hl = done_no_strike_hl or "CueTag"
-      table.insert(cols, { tag_display, tag_hl })
+      table.insert(cols, { tag_display, "CueTag" })
 
-      local meta_hl = done_no_strike_hl or "TelescopeResultsComment"
+      local meta_hl = "TelescopeResultsComment"
 
       local task_slug = vim.fn.fnamemodify(entry.name, ":t:r")
       table.insert(cols, { task_slug, meta_hl })
@@ -248,8 +238,8 @@ local function make_mem_entry_maker(opts)
       -- content hashes (hash is null on every master card); the trailing
       -- space belongs to slug.
     else
-      local cat_hl = done_no_strike_hl or get_category_highlight(entry.category)
-      local meta_hl = done_no_strike_hl or "TelescopeResultsComment"
+      local cat_hl = get_category_highlight(entry.category)
+      local meta_hl = "TelescopeResultsComment"
       table.insert(cols, { format_category(entry.category), cat_hl })
       table.insert(cols, { display_name, highlight })
       table.insert(cols, { hash_display, meta_hl })

@@ -15,10 +15,10 @@ local COLORS = {
 }
 
 function M.setup()
-  -- Finished artifacts render grey; "closed" additionally strikes through
-  -- while "complete" only dims.
-  vim.api.nvim_set_hl(0, "CueStatusDone", { fg = COLORS.grey, strikethrough = true })
-  vim.api.nvim_set_hl(0, "CueStatusComplete", { fg = COLORS.grey })
+  -- "closed" titles are struck through with NORMAL colors (no fg
+  -- override); "complete" gets no group at all (operator 2026-08-26:
+  -- grey row-wide dimming was hard to read).
+  vim.api.nvim_set_hl(0, "CueStatusDone", { strikethrough = true })
 
   -- Width-1 task-picker markers. Bold so the symbol reads at a glance.
   vim.api.nvim_set_hl(0, "CueMarkerActive", { fg = COLORS.cyan, bold = true })

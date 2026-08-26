@@ -24,13 +24,17 @@ function M.is_finished(artifact)
 end
 
 --- Picker highlight group for a finished artifact's status:
----   closed   -> "CueStatusDone"     (grey + strikethrough)
----   complete -> "CueStatusComplete" (grey, no strikethrough)
+---   closed   -> "CueStatusDone" (strikethrough, normal colors)
+---   complete -> nil (normal colors, no override)
 ---   other    -> nil (no override)
+---
+--- Operator decision 2026-08-26: grey row-wide dimming was hard to
+--- read; done cards keep normal colors and only "closed" titles are
+--- struck through.
 ---
 --- Kept pure (no vim.* calls) so it is unit-testable without Neovim.
 ---@param status string|nil   frontmatter status (e.g. "closed")
----@return string|nil  highlight group name, or nil when not finished
+---@return string|nil  highlight group name, or nil when no override
 function M.done_highlight_for(status)
   if not status or type(status) ~= "string" then
     return nil
@@ -39,7 +43,7 @@ function M.done_highlight_for(status)
   if not config.DONE_STATUSES[s] then
     return nil
   end
-  return (s == "closed") and "CueStatusDone" or "CueStatusComplete"
+  return (s == "closed") and "CueStatusDone" or nil
 end
 
 --- Marker character for a task card, used by the task-picker marker column

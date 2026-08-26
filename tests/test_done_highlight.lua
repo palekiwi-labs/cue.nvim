@@ -4,9 +4,13 @@
 -- done_highlight_for is the pure helper behind the artifact-picker row
 -- highlight for finished artifacts. Given a frontmatter status string it
 -- returns the highlight group name:
---   closed   -> "CueStatusDone"     (grey + strikethrough)
---   complete -> "CueStatusComplete" (grey, no strikethrough)
---   other    -> nil (not finished, no highlight override)
+--   closed   -> "CueStatusDone" (strikethrough, normal colors)
+--   complete -> nil (normal colors, no override)
+--   other    -> nil (no override)
+--
+-- Operator decision 2026-08-26: the grey row-wide dimming was hard to
+-- read (especially in the done picker); done cards render with normal
+-- colors. Strikethrough on the title remains the only "closed" signal.
 --
 -- Mocks the minimal `vim` global so the real module can be required without
 -- a running Neovim instance (mirrors test_task_marker.lua).
@@ -34,9 +38,9 @@ check("closed maps to CueStatusDone (strikethrough)", function()
 	assert(hl == "CueStatusDone", "expected CueStatusDone, got " .. tostring(hl))
 end)
 
-check("complete maps to CueStatusComplete (no strikethrough)", function()
+check("complete maps to nil (normal colors)", function()
 	local hl = core.done_highlight_for("complete")
-	assert(hl == "CueStatusComplete", "expected CueStatusComplete, got " .. tostring(hl))
+	assert(hl == nil, "expected nil, got " .. tostring(hl))
 end)
 
 check("open maps to nil", function()
@@ -55,9 +59,9 @@ check("match is case-insensitive", function()
 	assert(hl == "CueStatusDone", "expected CueStatusDone, got " .. tostring(hl))
 end)
 
-check("Complete (capitalized) maps to CueStatusComplete", function()
+check("Complete (capitalized) maps to nil", function()
 	local hl = core.done_highlight_for("Complete")
-	assert(hl == "CueStatusComplete", "expected CueStatusComplete, got " .. tostring(hl))
+	assert(hl == nil, "expected nil, got " .. tostring(hl))
 end)
 
 check("nil status maps to nil", function()
