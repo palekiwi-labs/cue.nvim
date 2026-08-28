@@ -352,14 +352,23 @@ end
 --- root policy (config.SLUG_ROOT) and the frontmatter defaults
 --- (config.TYPE_DEFAULTS).
 ---
+--- Returns nil for types outside config.SLUG_ROOT: routing e.g. a trace
+--- through the slug flow silently renamed it to <slug>.md, destroying the
+--- real extension (traces are often JSON, not markdown). Those types belong
+--- to the path flow (see path_artifact_plan / add_with_path).
+---
 --- Kept free of vim.* calls so it is unit-testable without Neovim.
 ---@param type string        artifact type ("task", "note", "todo")
 ---@param raw_slug string    user-entered slug text (normalised via slugify)
 ---@param task string        resolved cue scope slug (e.g. "master")
 ---@param extra_fm table|nil extra frontmatter fields (e.g. { kind = "design", parent = "refine-cue-skills" })
 ---@return table|nil  { filename=..., opts={ category, task, root, frontmatter } },
----                   or nil when the slug normalises to empty
+---                   or nil when the type is not a slug type or the slug
+---                   normalises to empty
 function M.slug_artifact_plan(type, raw_slug, task, extra_fm)
+  if config.SLUG_ROOT[type] == nil then
+    return nil
+  end
   local slug = M.slugify(raw_slug)
   if not slug or slug == "" then
     return nil
@@ -397,6 +406,46 @@ function M.slug_artifact_plan(type, raw_slug, task, extra_fm)
       category    = type,
       task        = task,
       root        = config.SLUG_ROOT[type] and true or false,
+      frontmatter = frontmatter,
+    },
+  }
+end
+
+--- Pure helper that computes the filename and add() opts for a path-based
+--- artifact (e.g. trace, spec). The path is used VERBATIM: no slugification
+--- and no forced extension, because path-flow artifacts are frequently JSON
+--- or plain text rather than markdown.
+---
+--- Frontmatter defaults (config.TYPE_DEFAULTS) apply only to markdown (.md)
+--- paths: `cue add` prepends YAML frontmatter unconditionally, which would
+--- corrupt a non-markdown file.
+---
+--- Root placement follows the type-intrinsic policy (config.PATH_ROOT);
+--- unlisted types default to pinned/point-in-time.
+---
+--- Kept free of vim.* calls so it is unit-testable without Neovim.
+---@param type string   artifact type (e.g. "trace", "spec")
+---@param path string   user-entered file path, used verbatim
+---@param task string   resolved cue scope slug (e.g. "master")
+---@return table|nil  { filename=..., opts={ category, task, root, frontmatter } },
+---                   or nil when the path is empty/whitespace-only
+function M.path_artifact_plan(type, path, task)
+  if not path or path:match("%S") == nil then
+    return nil
+  end
+
+  local frontmatter = {}
+  if path:match("%.md$") then
+    local defaults = config.TYPE_DEFAULTS[type] or {}
+    for k, v in pairs(defaults) do frontmatter[k] = v end
+  end
+
+  return {
+    filename = path,
+    opts = {
+      category    = type,
+      task        = task,
+      root        = config.PATH_ROOT[type] and true or false,
       frontmatter = frontmatter,
     },
   }
@@ -815,10 +864,19 @@ end
 ---
 --- When task is non-nil the scope dialog is skipped (caller already pinned
 --- scope). The scope dialog is also skipped for type == "task" (always master).
+--- Types outside config.SLUG_ROOT are rejected up front: their filenames are
+--- real paths (often non-markdown), so they belong to add_with_path instead.
 ---@param type string  artifact type ("task", "note", "todo")
 ---@param task string|nil  override task context (nil = prompt via confirm_scope)
 ---@param extra_fm table|nil  extra frontmatter fields (e.g. { kind = "design", parent = "refine-cue-skills" })
 function M.add_with_slug(type, task, extra_fm)
+  if config.SLUG_ROOT[type] == nil then
+    vim.notify(
+      "Error: '" .. type .. "' is not a slug-based markdown type; use add_with_path",
+      vim.log.levels.ERROR
+    )
+    return
+  end
   local Snacks = require('snacks')
   Snacks.input({
     prompt = "Slug (" .. type .. "):",
@@ -871,9 +929,12 @@ function M.add_with_title(type, task)
   end)
 end
 
---- Prompt for a file path, then confirm scope, then add a root artifact of the given type.
+--- Prompt for a file path, then confirm scope, then add an artifact of the
+--- given type. The path is used verbatim (extension preserved -- traces are
+--- often JSON, not markdown); root placement follows the type-intrinsic
+--- policy (config.PATH_ROOT, defaulting to pinned/point-in-time).
 --- When task is non-nil the scope dialog is skipped (caller already pinned scope).
----@param type string  artifact type (e.g. "note")
+---@param type string  artifact type (e.g. "trace", "spec")
 ---@param task string|nil  override task context (nil = prompt via confirm_scope)
 function M.add_with_path(type, task)
   local Snacks = require('snacks')
@@ -884,13 +945,12 @@ function M.add_with_path(type, task)
   }, function(path)
     if not path or path == "" then return end
     M.confirm_scope(type, task, function(target_task)
-      local defaults = config.TYPE_DEFAULTS[type] or {}
-      M.add(path, {
-        category    = type,
-        task        = target_task,
-        root        = true,
-        frontmatter = defaults,
-      })
+      local plan = M.path_artifact_plan(type, path, target_task)
+      if not plan then
+        vim.notify("Error: path is empty", vim.log.levels.ERROR)
+        return
+      end
+      M.add(plan.filename, plan.opts)
     end)
   end)
 end

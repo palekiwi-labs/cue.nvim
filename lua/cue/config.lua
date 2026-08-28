@@ -38,6 +38,17 @@ M.SLUG_ROOT = {
   todo = false,
 }
 
+-- Type-intrinsic root placement policy for the types that share the
+-- path-prompt creation flow (spec/trace). Mirrors the canonical cue-plugins
+-- ROOT_DEFAULT_TYPES set (root only for spec/note/doc/plan). Unlisted types
+-- default to pinned. Drives `path_artifact_plan`.
+--   spec  -> root (stable anchor document)
+--   trace -> NOT root (point-in-time diagnostics)
+M.PATH_ROOT = {
+  spec  = true,
+  trace = false,
+}
+
 M.category_highlights = {
   spec  = "CueCategorySpec",
   plan  = "CueCategoryPlan",

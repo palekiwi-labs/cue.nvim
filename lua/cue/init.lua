@@ -72,7 +72,8 @@ function M.add_with_title(type, task)
   return require('cue.core').add_with_title(type, task)
 end
 
---- Prompt for a file path, then add a root artifact of the given type
+--- Prompt for a file path (verbatim, extension preserved), then add an
+--- artifact of the given type with the type-intrinsic root policy
 ---@param type string
 ---@param task string|nil  task context (nil = active)
 function M.add_with_path(type, task)

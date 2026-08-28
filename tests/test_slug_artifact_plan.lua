@@ -135,6 +135,14 @@ check("SLUG_ROOT encodes task/note=root, todo=pinned", function()
 	assert(config.SLUG_ROOT.todo == false, "todo should be pinned")
 end)
 
+-- Types outside SLUG_ROOT are rejected: routing e.g. a trace through the
+-- slug flow silently renamed it to <slug>.md, destroying the real
+-- extension (traces are often JSON, not markdown).
+check("non-slug types (trace) return nil", function()
+	assert(core.slug_artifact_plan("trace", "crash-log.json", "master") == nil,
+		"expected nil plan for trace via slug flow")
+end)
+
 if failures == 0 then
 	print("\nAll tests passed.")
 else
