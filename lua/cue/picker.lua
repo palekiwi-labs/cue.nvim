@@ -567,6 +567,19 @@ function M.pick_artifacts(opts)
         copy_to_clipboard(prompt_bufnr, function(e) return e.hash end, "hash")
       end)
 
+      -- Copy task slug to clipboard (<A-s>). Task-picker only, like
+      -- <C-f>/<C-l>; the slug is the filename stem, same resolution as
+      -- <C-s>/<C-e>. Alt key because <C-s> is taken (switch context),
+      -- following the <A-p> precedent. Multi-selection joins slugs
+      -- space-separated (copy_to_clipboard).
+      if opts.type == "task" then
+        map({ 'i', 'n' }, '<A-s>', function()
+          copy_to_clipboard(prompt_bufnr, function(e)
+            return vim.fn.fnamemodify(e.name, ":r")
+          end, "task slug")
+        end)
+      end
+
       -- Jump to the parent artifact (<A-p>)
       map({ 'i', 'n' }, '<A-p>', function()
         local entry = action_state.get_selected_entry()
