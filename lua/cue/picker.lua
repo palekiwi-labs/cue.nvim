@@ -378,7 +378,6 @@ local function sort_artifacts(artifacts, opts)
     doc   = 6,
     bin   = 7,
     tmp   = 8,
-    ref   = 9,
   }
 
   table.sort(artifacts, function(a, b)
@@ -770,7 +769,6 @@ function M.ui_pick()
     { label = "trace", desc = "Trace / debug artifact" },
     { label = "bin",   desc = "Binary artifact" },
     { label = "tmp",   desc = "Temporary artifact" },
-    { label = "ref",   desc = "Reference artifact" },
   }
 
   local function pick_with_task(task)

@@ -81,7 +81,6 @@ function M.setup()
       { label = "trace", desc = "Trace / debug artifact" },
       { label = "bin",   desc = "Binary artifact" },
       { label = "tmp",   desc = "Temporary artifact" },
-      { label = "ref",   desc = "Reference artifact" },
     }
     Snacks.picker.select(items, {
       prompt = "Select artifact type:",

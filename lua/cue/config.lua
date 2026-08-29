@@ -59,7 +59,6 @@ M.category_highlights = {
   bin   = "CueCategoryBin",
   trace = "CueCategoryTrace",
   tmp   = "CueCategoryTmp",
-  ref   = "CueCategoryRef",
 }
 
 M.kind_highlights = {

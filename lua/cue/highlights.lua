@@ -37,7 +37,6 @@ function M.setup()
   vim.api.nvim_set_hl(0, "CueCategoryTrace", { fg = COLORS.yellow, bold = false })
   vim.api.nvim_set_hl(0, "CueCategoryBin", { fg = COLORS.red, bold = false })
   vim.api.nvim_set_hl(0, "CueCategoryTmp", { fg = COLORS.grey, bold = false })
-  vim.api.nvim_set_hl(0, "CueCategoryRef", { fg = COLORS.grey, bold = false })
 
   -- Task kind badge highlights
   vim.api.nvim_set_hl(0, "CueKindResearch", { fg = COLORS.blue, bold = false })
