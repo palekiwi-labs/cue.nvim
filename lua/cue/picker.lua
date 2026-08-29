@@ -562,21 +562,23 @@ function M.pick_artifacts(opts)
         end, "path")
       end)
 
-      -- Copy hash to clipboard
-      map({ 'i', 'n' }, '<C-h>', function()
-        copy_to_clipboard(prompt_bufnr, function(e) return e.hash end, "hash")
-      end)
-
-      -- Copy task slug to clipboard (<A-s>). Task-picker only, like
-      -- <C-f>/<C-l>; the slug is the filename stem, same resolution as
-      -- <C-s>/<C-e>. Alt key because <C-s> is taken (switch context),
-      -- following the <A-p> precedent. Multi-selection joins slugs
+      -- Copy to clipboard (<C-h>). Context-sensitive: task-type pickers
+      -- copy the task slug (filename stem, same resolution as
+      -- <C-s>/<C-e>); every other picker copies the artifact hash.
+      -- Task cards never carry content hashes (hash is null on every
+      -- master card -- same reason the hash column was dropped from the
+      -- task layout), so the hash binding was dead in task pickers and
+      -- the key is repurposed there. Multi-selection joins values
       -- space-separated (copy_to_clipboard).
       if opts.type == "task" then
-        map({ 'i', 'n' }, '<A-s>', function()
+        map({ 'i', 'n' }, '<C-h>', function()
           copy_to_clipboard(prompt_bufnr, function(e)
             return vim.fn.fnamemodify(e.name, ":r")
           end, "task slug")
+        end)
+      else
+        map({ 'i', 'n' }, '<C-h>', function()
+          copy_to_clipboard(prompt_bufnr, function(e) return e.hash end, "hash")
         end)
       end
 
