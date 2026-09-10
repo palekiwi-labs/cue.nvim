@@ -674,6 +674,30 @@ function M.pick_artifacts(opts)
         end)
       end
 
+      -- Load review findings JSON into diagnostics (<A-d> actionable, <A-a> all)
+      local load_review_diagnostics = function(opts_override)
+        local entry = action_state.get_selected_entry()
+        if not entry or not entry.path then return end
+
+        if vim.endswith(entry.name, ".json") or (entry.category == "trace" and vim.endswith(entry.path, ".json")) then
+          actions.close(prompt_bufnr)
+          local ok, cue_review = pcall(require, "cue.review")
+          if not ok then
+            ok, cue_review = pcall(require, "config.utils.cue_review")
+          end
+          if ok and cue_review.load_file then
+            cue_review.load_file(entry.path, opts_override)
+          else
+            vim.notify("Review diagnostics module not found", vim.log.levels.WARN)
+          end
+        else
+          vim.notify("Selected artifact is not a JSON trace: " .. (entry.name or ""), vim.log.levels.WARN)
+        end
+      end
+
+      map({ 'i', 'n' }, '<A-d>', function() load_review_diagnostics({}) end)
+      map({ 'i', 'n' }, '<A-a>', function() load_review_diagnostics({ all = true }) end)
+
       return true
     end,
   }):find()
