@@ -11,12 +11,14 @@
 --     The row label: `title` when it is a nonempty string, else the slug.
 --     Mirrors artifact_display_title's filename fallback.
 --
---   core.context_list_view(contexts, recency)
---     Turn decoded `cue context list --json` rows into picker rows, ordered
---     by recency (newest first). Recency is supplied by the caller as a
---     slug -> timestamp map: `cue context list --json` does not carry it,
---     and the spec defines it as the latest context log entry, never
---     created_at. Contexts with no log sort last, alphabetically.
+--   core.context_list_view(contexts)
+--     Turn decoded `cue context list --json` rows into picker rows by
+--     dropping malformed entries. Ordering is NOT done here: `cue context
+--     list --sort recency` owns it, and its documented rule ("newest log
+--     entry first; contexts with no log entry last") is precisely what this
+--     module used to reimplement. The CLI also now emits `last_logged_at`
+--     on every row, so the old slug -> timestamp parameter has no source
+--     left to come from.
 --
 -- Mocks the minimal `vim` global so the real module can be required without
 -- a running Neovim instance.
@@ -105,6 +107,64 @@ check("emits --json before -C and --store", function()
 	)
 end)
 
+check("appends --sort recency", function()
+	assert_argv(core.list_contexts_argv({ sort = "recency" }), { "cue", "context", "list", "--sort", "recency" })
+end)
+
+check("refuses a sort the CLI does not define", function()
+	-- `--sort` has exactly one possible value; passing anything else would
+	-- make cue exit non-zero and the picker come up empty.
+	assert_argv(core.list_contexts_argv({ sort = "title" }), { "cue", "context", "list" })
+	assert_argv(core.list_contexts_argv({ sort = true }), { "cue", "context", "list" })
+end)
+
+check("appends --scope for either breadth", function()
+	assert_argv(core.list_contexts_argv({ scope = "repo" }), { "cue", "context", "list", "--scope", "repo" })
+	assert_argv(core.list_contexts_argv({ scope = "store" }), { "cue", "context", "list", "--scope", "store" })
+end)
+
+check("refuses a scope the CLI does not define", function()
+	assert_argv(core.list_contexts_argv({ scope = "global" }), { "cue", "context", "list" })
+end)
+
+check("appends --limit for a positive integer", function()
+	assert_argv(core.list_contexts_argv({ limit = 5 }), { "cue", "context", "list", "--limit", "5" })
+end)
+
+check("refuses a limit that is not a positive integer", function()
+	assert_argv(core.list_contexts_argv({ limit = 0 }), { "cue", "context", "list" })
+	assert_argv(core.list_contexts_argv({ limit = -1 }), { "cue", "context", "list" })
+	assert_argv(core.list_contexts_argv({ limit = 2.5 }), { "cue", "context", "list" })
+	assert_argv(core.list_contexts_argv({ limit = "5" }), { "cue", "context", "list" })
+end)
+
+check("orders every flag ahead of -C and --store", function()
+	assert_argv(
+		core.list_contexts_argv({
+			json = true,
+			scope = "store",
+			sort = "recency",
+			limit = 5,
+			dir = "/my/repo",
+			store = "/my/store",
+		}),
+		{
+			"cue", "context", "list",
+			"--json",
+			"--scope", "store",
+			"--sort", "recency",
+			"--limit", "5",
+			"-C", "/my/repo",
+			"--store", "/my/store",
+		}
+	)
+end)
+
+check("keeps the plain-slug argv untouched for confirm_scope", function()
+	-- list_contexts (and through it confirm_scope) parses bare slug lines.
+	assert_argv(core.list_contexts_argv(), { "cue", "context", "list" })
+end)
+
 -- ─── context_display_title ───────────────────────────────────────────────────
 
 check("displays the title when it is a nonempty string", function()
@@ -147,56 +207,48 @@ check("drops rows without a slug or a path", function()
 	assert_order(rows, { "keeper" })
 end)
 
-check("orders by recency, newest first", function()
-	local rows = core.context_list_view({
-		ctx("older", "Older"),
-		ctx("newest", "Newest"),
-		ctx("middle", "Middle"),
-	}, { older = 1789000000, newest = 1789200000, middle = 1789100000 })
-	assert_order(rows, { "newest", "middle", "older" })
-end)
-
-check("ignores created_at when ordering", function()
-	-- `stale` was created most recently but has the oldest log entry: the
-	-- spec defines recency exclusively as the latest context log entry.
-	local fresh = ctx("fresh", "Fresh")
-	fresh.created_at = 1
-	local stale = ctx("stale", "Stale")
-	stale.created_at = 1789999999
-	assert_order(core.context_list_view({ stale, fresh }, { fresh = 200, stale = 100 }), { "fresh", "stale" })
-end)
-
-check("sorts contexts with no log entry last, alphabetically by title", function()
+check("preserves CLI order verbatim", function()
+	-- cue owns the recency axis, so it owns the sort. Re-deriving an order
+	-- here would mean keeping a second implementation of `--sort recency`
+	-- in step with the first.
 	local rows = core.context_list_view({
 		ctx("zeta", "Zeta"),
-		ctx("logged", "Logged"),
-		ctx("alpha", "alpha context"),
-	}, { logged = 1789000000 })
-	assert_order(rows, { "logged", "alpha", "zeta" })
+		ctx("alpha", "Alpha"),
+		ctx("middle", "Middle"),
+	})
+	assert_order(rows, { "zeta", "alpha", "middle" })
 end)
 
-check("breaks recency ties on title, then slug", function()
-	local rows = core.context_list_view({
-		ctx("b-slug", "Same title"),
-		ctx("a-slug", "Same title"),
-		ctx("c-slug", "Another title"),
-	}, { ["a-slug"] = 500, ["b-slug"] = 500, ["c-slug"] = 500 })
-	assert_order(rows, { "c-slug", "a-slug", "b-slug" })
+check("does not reorder on created_at or title", function()
+	local older = ctx("older", "zzz")
+	older.created_at = 1
+	local newer = ctx("newer", "aaa")
+	newer.created_at = 1789999999
+	assert_order(core.context_list_view({ older, newer }), { "older", "newer" })
 end)
 
-check("treats a missing recency map as no logs at all", function()
-	local rows = core.context_list_view({ ctx("beta", "Beta"), ctx("alpha", "Alpha") })
-	assert_order(rows, { "alpha", "beta" })
+check("keeps unlogged contexts where the CLI put them", function()
+	-- `--sort recency` already places contexts with no log entry last.
+	local logged = ctx("logged", "Logged")
+	logged.last_logged_at = 1789000000
+	local unlogged = ctx("unlogged", "Unlogged")
+	assert_order(core.context_list_view({ logged, unlogged }), { "logged", "unlogged" })
 end)
 
 check("carries the fields the picker renders", function()
-	local rows = core.context_list_view({ ctx("auth", "Auth redesign") }, { auth = 1789123456 })
-	local row = rows[1]
-	assert(row.context == "auth", "slug not carried")
-	assert(row.title == "Auth redesign", "title not carried")
-	assert(row.scope == "palekiwi/palekiwi", "scope not carried")
-	assert(row.path == "/home/pl/cue/palekiwi/palekiwi/auth/context.md", "path not carried")
-	assert(row.recency == 1789123456, "recency not attached to the row")
+	local row = ctx("auth", "Auth redesign")
+	row.last_logged_at = 1789123456
+	local rows = core.context_list_view({ row })
+	local got = rows[1]
+	assert(got.context == "auth", "slug not carried")
+	assert(got.title == "Auth redesign", "title not carried")
+	assert(got.scope == "palekiwi/palekiwi", "scope not carried")
+	assert(got.path == "/home/pl/cue/palekiwi/palekiwi/auth/context.md", "path not carried")
+	assert(got.last_logged_at == 1789123456, "last_logged_at not carried")
+end)
+
+check("no longer exposes a client-side comparator", function()
+	assert(core.context_less == nil, "cue context list --sort owns the ordering")
 end)
 
 if failures == 0 then

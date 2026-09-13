@@ -248,49 +248,23 @@ function M.context_display_title(ctx)
   return ctx.context or ""
 end
 
---- Comparator for the context browser: recency descending (newest first),
---- then the displayed title, then the slug.
+--- Turn a decoded `cue context list --json` payload into the browser's rows
+--- by dropping malformed entries. CLI order is preserved exactly.
 ---
---- Contexts with no recency sort after every context that has one, rather
---- than being treated as infinitely old duplicates of each other: a context
---- that has never been logged in has no position on the recency axis at all.
+--- Ordering is deliberately not done here. `cue context list --sort recency`
+--- documents its rule as "newest log entry first; contexts with no log entry
+--- last", which is the rule this module used to implement by hand against a
+--- caller-supplied slug -> timestamp map. cue owns the recency axis, so it
+--- owns the sort; a second implementation here would only be something to
+--- keep in step. The payload now also carries `last_logged_at` per row, so
+--- the map has no source left to come from and the parameter is gone.
 ---
---- Title comparison is case-insensitive, and the slug is the final
---- discriminator because table.sort is not stable and titles are not unique.
----@param a table
----@param b table
----@return boolean
-function M.context_less(a, b)
-  local a_recency = a.recency
-  local b_recency = b.recency
-  if a_recency ~= b_recency then
-    if not a_recency then return false end
-    if not b_recency then return true end
-    return a_recency > b_recency
-  end
-
-  local a_title = M.context_display_title(a):lower()
-  local b_title = M.context_display_title(b):lower()
-  if a_title ~= b_title then
-    return a_title < b_title
-  end
-
-  return (a.context or "") < (b.context or "")
-end
-
---- Turn a decoded `cue context list --json` payload into the browser's rows:
---- drop malformed entries, attach each context's recency, then order by
---- context_less.
----
---- Recency is passed in rather than read from the payload. `cue context list`
---- carries `created_at` only, and the spec defines recency exclusively as the
---- timestamp of the latest context log entry, which creation time does not
---- approximate: a context created months ago and logged into this morning is
---- the most recent one.
+--- A row is malformed when it has no slug or no path: the slug identifies it
+--- to pin/unpin and activate, and the path is what the previewer and <CR>
+--- open. A row missing either cannot be acted on.
 ---@param contexts table|nil  decoded `cue context list --json` output
----@param recency table|nil   slug -> timestamp map; missing slugs have no log
----@return table  ordered rows (never nil)
-function M.context_list_view(contexts, recency)
+---@return table  rows in CLI order (never nil)
+function M.context_list_view(contexts)
   local rows = {}
   if type(contexts) ~= "table" then
     return rows
@@ -299,11 +273,9 @@ function M.context_list_view(contexts, recency)
     if type(ctx) == "table"
        and type(ctx.context) == "string"
        and type(ctx.path) == "string" then
-      ctx.recency = recency and recency[ctx.context] or nil
       rows[#rows + 1] = ctx
     end
   end
-  table.sort(rows, M.context_less)
   return rows
 end
 
@@ -614,12 +586,36 @@ end
 --- Prompt the user to confirm (or change) the cue scope for a new artifact.
 ---
 --- Pure helper that builds the argv table for `cue context list`.
----@param opts table|nil  supports: dir (string, -C), store (string, --store)
+---
+--- `scope`, `sort` and `limit` are validated against the CLI's own
+--- vocabulary and silently omitted when they do not match. cue defines
+--- exactly one sort (`recency`) and two breadths (`repo`, `store`), and
+--- passing anything else makes cue exit non-zero, which surfaces to the
+--- operator as a picker that opens empty rather than as an error.
+---
+--- Called with no opts this still yields the bare `cue context list`, whose
+--- plain slug-per-line output list_contexts and confirm_scope parse.
+---@param opts table|nil  supports: json (bool), scope ("repo"|"store"),
+---  sort ("recency"), limit (positive integer), dir (string, -C),
+---  store (string, --store)
 ---@return string[]
 function M.list_contexts_argv(opts)
   local cmd = { 'cue', 'context', 'list' }
   if opts and opts.json then
     table.insert(cmd, '--json')
+  end
+  if opts and (opts.scope == "repo" or opts.scope == "store") then
+    table.insert(cmd, '--scope')
+    table.insert(cmd, opts.scope)
+  end
+  if opts and opts.sort == "recency" then
+    table.insert(cmd, '--sort')
+    table.insert(cmd, opts.sort)
+  end
+  if opts and type(opts.limit) == "number"
+     and opts.limit > 0 and opts.limit % 1 == 0 then
+    table.insert(cmd, '--limit')
+    table.insert(cmd, tostring(opts.limit))
   end
   if opts and opts.dir then
     table.insert(cmd, '-C')
