@@ -1,7 +1,7 @@
 # cue.nvim
 
-Neovim plugin for the `cue` artifact tracker. Telescope pickers and `:Cue*`
-commands for working with cue artifacts.
+Neovim plugin for the `cue` artifact tracker. Telescope pickers and creation
+flows for working with cue artifacts.
 
 ## Requirements
 
@@ -23,20 +23,10 @@ commands for working with cue artifacts.
 }
 ```
 
-## Commands
-
-| Command | Description |
-|---|---|
-| `:CuePick [type] [key=value ...]` | Open artifact picker (`all`, `branch=X`, optional `type` filter) |
-| `:CueAdd [type] [file] [key=value ...]` | Add artifact (no args = wizard; `root`, `force`, `branch=X`, etc.) |
-| `:CueLog [branch]` | Open branch log file (default: current branch) |
-| `:CueContext` | Open current context file |
-| `:CueActiveTask` | Open the active task card (notifies when on global/master context) |
-
-All commands are thin wrappers over `require('cue').*` functions; bind those
-directly for keybinding-driven workflows.
-
 ## Lua API
+
+The plugin registers no `:Cue*` user commands. Every entry point is a
+function on the `cue` module; bind the ones you use to keys.
 
 ### `require('cue').pick_context_artifacts(context, opts)`
 

@@ -11,12 +11,14 @@
 
 local M = {}
 
---- Bootstrap the plugin: apply config, set highlights, register commands.
+--- Bootstrap the plugin: apply config and set highlights.
+---
+--- The plugin registers no `:Cue*` user commands. Every entry point is a
+--- function on this module; bind the ones you use to keys.
 ---@param opts table|nil
 function M.setup(opts)
   require('cue.config').apply(opts)
   require('cue.highlights').setup()
-  require('cue.commands').setup()
 end
 
 -- ─── Re-export core functions ─────────────────────────────────────────────────
