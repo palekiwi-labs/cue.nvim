@@ -28,19 +28,6 @@ function M.open_context()
   return require('cue.core').open_context()
 end
 
---- Open the active task context log file
----@param task string|nil  task slug (nil = active context)
-function M.open_log(task)
-  return require('cue.core').open_log(task)
-end
-
---- Open the active task card (the .cue/master/task/<slug>.md for the active
---- context). Notifies and does nothing when the global (master) context is
---- active.
-function M.open_active_task()
-  return require('cue.core').open_active_task()
-end
-
 --- Add a new artifact via `cue add`
 ---@param filename string
 ---@param opts table|nil
@@ -97,27 +84,10 @@ function M.pick_artifacts(opts)
   return require('cue.picker').pick_artifacts(opts)
 end
 
---- Open a picker over inbox task cards (status "inbox").
-function M.pick_inbox_tasks()
-  return require('cue.picker').pick_inbox_tasks()
-end
-
---- Open a picker over done task cards (status "complete" or "closed").
-function M.pick_done_tasks()
-  return require('cue.picker').pick_done_tasks()
-end
-
 --- Browse the active context's artifacts (task/spec/plan/note/trace) (<C-s>).
 --- Resolves active context via `cue status --json`.
 ---@param opts table|nil  supports: dir (`cue -C`), store (`cue --store`)
 function M.pick_active_context_artifacts(opts)
-  return require('cue.picker').pick_active_context_artifacts(opts)
-end
-
---- Legacy alias for pick_active_context_artifacts (<C-s>).
---- Replaces the legacy task-scoped picker which relied on obsolete --task flags.
----@param opts table|nil  supports: dir (`cue -C`), store (`cue --store`)
-function M.pick_active_task_artifacts(opts)
   return require('cue.picker').pick_active_context_artifacts(opts)
 end
 
@@ -133,21 +103,6 @@ end
 --- Open Telescope context file picker
 function M.pick_context()
   return require('cue.picker').pick_context()
-end
-
---- Guided task-context→type→artifact picker
-function M.ui_pick()
-  return require('cue.picker').ui_pick()
-end
-
---- Open task-context selector, then show its artifacts
-function M.pick_task_context_artifacts()
-  return require('cue.picker').pick_task_context_artifacts()
-end
-
---- Open task-context selector, then open that context's log file
-function M.pick_logs()
-  return require('cue.picker').pick_logs()
 end
 
 return M

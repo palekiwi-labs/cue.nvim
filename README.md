@@ -72,8 +72,6 @@ Resolves the active context via `cue status --json` (with optional `opts.dir` an
 If no context is active (or on error), notifies the user without opening a
 picker.
 
-`require('cue').pick_active_task_artifacts(opts)` is preserved as a legacy alias.
-
 ## Development
 
 ```sh

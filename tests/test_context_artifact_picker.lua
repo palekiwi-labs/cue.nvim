@@ -598,21 +598,23 @@ check("pick_active_context_artifacts notifies on status command error", function
 	assert(last_notify().level == vim.log.levels.ERROR, "status failure is an error")
 end)
 
-check("pick_active_task_artifacts is a working alias for pick_active_context_artifacts", function()
-	reset({
-		status_decoded = { context = "active-feature" },
-		decoded = fixture(),
-		stdout = "[json]",
-	})
-	picker.pick_active_task_artifacts()
-	assert(state.picker_opts ~= nil, "picker must open via pick_active_task_artifacts")
-	assert(state.picker_opts.prompt_title == "Cue Artifacts (active-feature)")
-end)
-
 check("pick_active_context_artifacts is re-exported from cue module", function()
 	local cue = require("cue")
 	assert(type(cue.pick_active_context_artifacts) == "function", "cue.pick_active_context_artifacts must be public")
-	assert(type(cue.pick_active_task_artifacts) == "function", "cue.pick_active_task_artifacts must be public")
+end)
+
+-- The legacy task-scoped surface is gone, not aliased. Keeping
+-- pick_active_task_artifacts as a forwarder would preserve the task-scope
+-- vocabulary the migration is retiring.
+check("the legacy task-scoped picker names are gone", function()
+	local cue = require("cue")
+	assert(picker.pick_active_task_artifacts == nil, "picker.pick_active_task_artifacts must be removed")
+	assert(cue.pick_active_task_artifacts == nil, "cue.pick_active_task_artifacts must be removed")
+	assert(picker.pick_inbox_tasks == nil, "picker.pick_inbox_tasks must be removed")
+	assert(picker.pick_done_tasks == nil, "picker.pick_done_tasks must be removed")
+	assert(picker.pick_task_context_artifacts == nil, "picker.pick_task_context_artifacts must be removed")
+	assert(picker.pick_logs == nil, "picker.pick_logs must be removed")
+	assert(picker.ui_pick == nil, "picker.ui_pick must be removed")
 end)
 
 if failures == 0 then

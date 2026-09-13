@@ -110,14 +110,6 @@ local function entry_tags(entry)
   return core.task_tags(entry.frontmatter)
 end
 
---- List selectable scopes via core.list_scopes() (task-card slugs, always
---- including "master"). Thin wrapper so the three call sites below share a
---- single source of truth with core.confirm_scope.
----@return table|nil  sorted list of scope slugs, or nil if .cue/ is absent
-local function list_task_contexts()
-  return core.list_scopes()
-end
-
 --- Custom Telescope entry maker for cue artifacts
 ---@param opts table|nil  supports: active_task (string), show_marker (bool)
 ---@return function
@@ -657,23 +649,6 @@ function M.pick_artifacts(opts)
         end)
       end)
 
-      -- Open the selected task's log.md (<C-l>). Task-picker only — other
-      -- pickers have no status column. The slug is the filename stem;
-      -- core.open_log resolves .cue/<slug>/log.md, checks filereadable, and
-      -- notifies the user if the log does not exist yet.
-      if opts.type == "task" then
-        map({ 'i', 'n' }, '<C-l>', function()
-          local entry = action_state.get_selected_entry()
-          if not entry then return end
-          local slug = vim.fn.fnamemodify(entry.name, ":r")
-          if not slug or slug == "" then return end
-          actions.close(prompt_bufnr)
-          vim.schedule(function()
-            core.open_log(slug)
-          end)
-        end)
-      end
-
       -- Load review findings JSON into diagnostics (<A-d> actionable, <A-a> all)
       local load_review_diagnostics = function(opts_override)
         local entry = action_state.get_selected_entry()
@@ -850,32 +825,6 @@ function M.pick_context_artifacts(context, opts)
   }):find()
 end
 
---- Open a picker over the INBOX: task cards with status "inbox"
---- (operator's idea-intake status). Positive status filter via
---- opts.status, so the picker lists only inbox cards and the prompt
---- title reflects it.
-function M.pick_inbox_tasks()
-  return M.pick_artifacts({ type = "task", task = "master", status = "inbox" })
-end
-
---- Open a picker over DONE task cards: statuses "complete" and
---- "closed" (config.DONE_STATUSES). List-based positive filter via
---- opts.statuses, mirroring pick_inbox_tasks. Counterpart of the
---- <C-t> board, which hides these statuses (config.
---- HIDDEN_TASK_STATUSES).
----
---- dim_done=false: every card here is done, so the grey scanning aid
---- for mixed lists would grey out the whole picker (operator
---- 2026-08-26). Normal colors; closed titles still strike through.
-function M.pick_done_tasks()
-  return M.pick_artifacts({
-    type = "task",
-    task = "master",
-    statuses = { "complete", "closed" },
-    dim_done = false,
-  })
-end
-
 --- Browse the active context's artifacts using the context artifact picker (<C-s>).
 ---
 --- Resolves the active context via `cue status --json`. When a context is
@@ -895,13 +844,6 @@ function M.pick_active_context_artifacts(opts)
     return
   end
   return M.pick_context_artifacts(ctx, opts)
-end
-
---- Legacy alias for pick_active_context_artifacts (<C-s>).
---- Replaces the legacy task-scoped picker which relied on obsolete --task flags.
----@param opts table|nil
-function M.pick_active_task_artifacts(opts)
-  return M.pick_active_context_artifacts(opts)
 end
 
 --- Open a Telescope picker for all cue context files
@@ -945,119 +887,6 @@ function M.pick_context()
       return true
     end,
   }):find()
-end
-
---- Guided task-context selector → artifact type selector → artifact picker
-function M.ui_pick()
-  local Snacks = require('snacks')
-
-  local task_items = {
-    { label = "Current Task",    value = "current" },
-    { label = "Master",          value = "master" },
-    { label = "All",             value = "all" },
-    { label = "Select Task...",  value = "pick" },
-  }
-
-  local category_items = {
-    { label = "task",  desc = "Task (on master)" },
-    { label = "todo",  desc = "TODO (informal note)" },
-    { label = "note",  desc = "Note" },
-    { label = "spec",  desc = "Specification" },
-    { label = "plan",  desc = "Plan artifact" },
-    { label = "doc",   desc = "Documentation artifact" },
-    { label = "trace", desc = "Trace / debug artifact" },
-    { label = "bin",   desc = "Binary artifact" },
-    { label = "tmp",   desc = "Temporary artifact" },
-  }
-
-  local function pick_with_task(task)
-    Snacks.picker.select(category_items, {
-      prompt = "Select artifact type:",
-      format_item = function(item)
-        return string.format("%-8s  %s", item.label, item.desc)
-      end,
-    }, function(choice)
-      if not choice then return end
-      local pick_opts = {}
-      if task == "all" then
-        pick_opts.all = true
-      else
-        pick_opts.task = task
-      end
-      pick_opts.type = choice.label
-      M.pick_artifacts(pick_opts)
-    end)
-  end
-
-  local function select_task(callback)
-    Snacks.picker.select(task_items, {
-      prompt = "Select Task Scope:",
-      format_item = function(item) return item.label end,
-    }, function(choice)
-      if not choice then return end
-      if choice.value == "pick" then
-        local contexts = list_task_contexts()
-        if not contexts or #contexts == 0 then
-          vim.notify("No task contexts with artifacts found", vim.log.levels.INFO)
-          return
-        end
-        Snacks.picker.select(contexts, { prompt = "Select Task:" }, function(ctx)
-          if ctx then callback(ctx) end
-        end)
-      elseif choice.value == "current" then
-        callback(nil)
-      elseif choice.value == "all" then
-        callback("all")
-      else
-        callback(choice.value)
-      end
-    end)
-  end
-
-  select_task(function(task)
-    pick_with_task(task)
-  end)
-end
-
---- Open a task-context selector, then show artifacts for the chosen context
-function M.pick_task_context_artifacts()
-  local contexts = list_task_contexts()
-  if not contexts then
-    vim.notify("Error: .cue directory not found", vim.log.levels.ERROR)
-    return
-  end
-
-  if #contexts == 0 then
-    vim.notify("No task contexts with artifacts found", vim.log.levels.INFO)
-    return
-  end
-
-  local Snacks = require('snacks')
-  Snacks.picker.select(contexts, { prompt = "Select Task Context:" }, function(ctx)
-    if ctx then
-      M.pick_artifacts({ task = ctx })
-    end
-  end)
-end
-
---- Open a task-context selector, then open that context's log file.
---- Symmetric to pick_context() and pick_task_context_artifacts().
-function M.pick_logs()
-  local contexts = list_task_contexts()
-  if not contexts then
-    vim.notify("Error: .cue directory not found", vim.log.levels.ERROR)
-    return
-  end
-
-  if #contexts == 0 then
-    vim.notify("No task contexts found", vim.log.levels.INFO)
-    return
-  end
-
-  local Snacks = require('snacks')
-  Snacks.picker.select(contexts, { prompt = "Select Task (log):" }, function(ctx)
-    if ctx then require('cue.core').open_log(ctx) end
-  end)
 end
 
 return M

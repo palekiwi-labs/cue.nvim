@@ -786,73 +786,6 @@ function M.get_active_task()
   return result
 end
 
---- Pure decision helper for open_active_task().
----
---- Given the status object returned by get_active_task() (which wraps
---- `cue status --json`), decide what to do with the active context:
----   { action = "open",    path = ".cue/master/task/<slug>.md" }
----   { action = "notify",  message = "..." }
----
---- The global (master) context has no single associated task, so it resolves
---- to a notify decision. A missing/nil status is treated the same way.
---- Kept free of side effects so it can be unit-tested without Neovim.
----@param status table|nil  { context, global, ... } from get_active_task()
----@return table
-function M.resolve_active_task_path(status)
-  if not status or not status.context or status.context == "" then
-    return { action = "notify", message = "No active task context found" }
-  end
-  -- The global context (master) has no associated task card.
-  if status.global or status.context == "master" then
-    return { action = "notify", message = "No active task: global context (master) is active" }
-  end
-  return { action = "open", path = ".cue/master/task/" .. status.context .. ".md" }
-end
-
---- Pure decision helper for pick_active_task_artifacts() (cue.picker).
----
---- Given the status object returned by get_active_task() (which wraps
---- `cue status --json`), decide which task scope a picker should be
---- scoped to:
----   { action = "pick",   task = "<slug>" }
----   { action = "notify", message = "..." }
----
---- The global (master) context has no task scope, so it resolves to a
---- notify decision. Delegates the master/nil checks to
---- resolve_active_task_path so the two helpers can never disagree about
---- what counts as "no active task".
---- Kept free of side effects so it can be unit-tested without Neovim.
----@param status table|nil  { context, global, ... } from get_active_task()
----@return table
-function M.task_scope_for(status)
-  local decision = M.resolve_active_task_path(status)
-  if decision.action == "notify" then
-    return decision
-  end
-  return { action = "pick", task = status.context }
-end
-
---- Open the active task card in a new buffer.
----
---- Resolves the active context via `cue status --json`. When a task slug is
---- active, opens `.cue/master/task/<slug>.md`. When the global (master)
---- context is active (or the task file is missing), notifies the user and
---- does nothing.
-function M.open_active_task()
-  local decision = M.resolve_active_task_path(M.get_active_task())
-  if decision.action == "notify" then
-    vim.notify(decision.message, vim.log.levels.WARN)
-    return
-  end
-
-  if vim.fn.filereadable(decision.path) == 0 then
-    vim.notify("Error: task file does not exist: " .. decision.path, vim.log.levels.ERROR)
-    return
-  end
-
-  vim.cmd.edit(decision.path)
-end
-
 --- Build the `cue context switch <slug>` argv.
 ---
 --- The legacy top-level `cue switch` is gone: in the central-store model the
@@ -1052,27 +985,6 @@ function M.list_scopes()
   return M.scope_set(names)
 end
 
---- Open the task context's log file and jump to the end.
---- Default is the active task context (from `cue status`); pass a task slug
---- (e.g. "master") to override.
----@param task string|nil  task slug (nil = active context)
-function M.open_log(task)
-  task = task or M.get_active_task().context
-  if not task or task == "" then
-    vim.notify("Error: Could not determine active task context", vim.log.levels.ERROR)
-    return
-  end
-
-  local path = ".cue/" .. task .. "/log.md"
-  if vim.fn.filereadable(path) == 0 then
-    vim.notify("Error: Log file does not exist: " .. path, vim.log.levels.ERROR)
-    return
-  end
-
-  vim.cmd.edit(path)
-  vim.cmd("normal! G")
-end
-
 --- Add a new artifact file via `cue add` and open it for editing
 ---@param filename string
 ---@param opts table|nil
@@ -1150,31 +1062,6 @@ function M.add(filename, opts)
   vim.cmd("startinsert!")
 
   return filepath
-end
-
---- Prompt for task category kind (research|design|build|review|coord)
----@param callback function called with selected kind string or nil
-function M.prompt_task_kind(callback)
-  local Snacks = require('snacks')
-  local items = {
-    { label = "build",    desc = "Feature implementation & test execution (default)" },
-    { label = "design",   desc = "Specification & context setup" },
-    { label = "research", desc = "Exploration & feasibility analysis" },
-    { label = "review",   desc = "Code review & evaluation" },
-    { label = "coord",    desc = "Multi-component orchestration" },
-  }
-  Snacks.picker.select(items, {
-    prompt = "Select Task Kind:",
-    format_item = function(item)
-      return string.format("%-10s  %s", item.label, item.desc)
-    end,
-  }, function(choice)
-    if choice then
-      callback(choice.label)
-    else
-      callback(nil)
-    end
-  end)
 end
 
 --- Prompt for parent task selection from available scopes
