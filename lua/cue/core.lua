@@ -62,6 +62,55 @@ function M.active_context_decision(status)
   return { action = "pick", context = trimmed }
 end
 
+--- A decoded JSON field as a trimmed, nonempty string, or nil.
+--- Rejects vim.NIL and non-strings, which vim.json.decode yields for JSON
+--- nulls and unquoted numerics respectively.
+---@param value any
+---@return string|nil
+local function text_field(value)
+  if value == nil or value == vim.NIL or type(value) ~= "string" then
+    return nil
+  end
+  local trimmed = value:gsub("^%s+", ""):gsub("%s+$", "")
+  if trimmed == "" then
+    return nil
+  end
+  return trimmed
+end
+
+--- Absolute path to the active context's `context.md`, derived from a decoded
+--- `cue status --json` table.
+---
+--- `cue context path` and `cue context init` were removed from the CLI, so
+--- there is no query that answers this. There does not need to be one: in the
+--- central-store model an absolute path IS the store root joined to the
+--- canonical address, and `cue status --json` carries both `store` and
+--- `address`. Deriving it here costs no extra subprocess, because
+--- get_active_context already returns the whole status table.
+---
+--- `context.md` is the only piece of store layout the plugin knows. Everything
+--- else it opens comes from a `path` field the CLI handed it.
+---
+--- Returns nil rather than a partial path when either field is unusable: a
+--- path missing its store is relative and a path missing its address points at
+--- the store root, and both would open as a new empty buffer instead of
+--- surfacing the error.
+---@param status table|nil  decoded `cue status --json` output
+---@return string|nil
+function M.active_context_path(status)
+  if not status or status == vim.NIL or type(status) ~= "table" then
+    return nil
+  end
+
+  local store = text_field(status.store)
+  local address = text_field(status.address)
+  if not store or not address then
+    return nil
+  end
+
+  return (store:gsub("/+$", "")) .. "/" .. address .. "/context.md"
+end
+
 --- Build the `cue list` argv for ONE explicit context.
 ---
 --- Emits the current CLI surface only: `--context` for the scope, `-C` for an
@@ -657,29 +706,32 @@ end
 
 -- ─── Public API ───────────────────────────────────────────────────────────────
 
---- Open the current cue context file in the editor
+--- Open the active context's `context.md` in the editor.
+---
+--- One `cue status --json` call: it reports whether a context is active AND
+--- carries the `store` and `address` the path is derived from.
+---
+--- The legacy implementation asked `cue context path` and, on a miss, ran
+--- `cue context init` to conjure a context before retrying. Neither
+--- subcommand exists, and the auto-init behaviour is not reinstated: cue has
+--- no default or fallback context, and creating one as a side effect of a
+--- navigation binding is exactly the implicit-context habit the central-store
+--- model removes. With no active context this reports and stops.
 function M.open_context()
-  local cmd = { 'cue', 'context', 'path' }
-  local output = M.execute_command(cmd)
-
-  if not output or output == "" then
-    vim.notify("Context not found, initializing...", vim.log.levels.INFO)
-    local init_output, init_err = M.execute_command({ 'cue', 'context', 'init' })
-    if not init_output then
-      vim.notify("Error initializing context: " .. (init_err or "unknown"), vim.log.levels.ERROR)
-      return
-    end
-    local err
-    output, err = M.execute_command(cmd)
-    if not output or output == "" then
-      vim.notify("Error: " .. (err or "No current context found after init"), vim.log.levels.ERROR)
-      return
-    end
+  local ctx, status, err = M.get_active_context()
+  if not ctx then
+    vim.notify("cue: " .. (err or "no active context"), vim.log.levels.ERROR)
+    return
   end
 
-  local path = vim.trim(output)
+  local path = M.active_context_path(status)
+  if not path then
+    vim.notify("cue: status reported no store/address for " .. ctx, vim.log.levels.ERROR)
+    return
+  end
+
   if vim.fn.filereadable(path) == 0 then
-    vim.notify("Error: Context file does not exist: " .. path, vim.log.levels.ERROR)
+    vim.notify("cue: context file does not exist: " .. path, vim.log.levels.ERROR)
     return
   end
 
