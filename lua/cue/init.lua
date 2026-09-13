@@ -5,7 +5,7 @@
 ---
 --- All public functions are re-exported here so callers can do:
 ---   local cue = require('cue')
----   cue.pick_artifacts({ type = "note" })
+---   cue.pick_context_artifacts("cue-nvim-workflow")
 ---   cue.add_with_title("note")
 ---   etc.
 
@@ -78,12 +78,6 @@ end
 
 -- ─── Re-export picker functions ───────────────────────────────────────────────
 
---- Open Telescope artifact picker
----@param opts table|nil
-function M.pick_artifacts(opts)
-  return require('cue.picker').pick_artifacts(opts)
-end
-
 --- Browse the active context's artifacts (task/spec/plan/note/trace) (<C-s>).
 --- Resolves active context via `cue status --json`.
 ---@param opts table|nil  supports: dir (`cue -C`), store (`cue --store`)
@@ -98,11 +92,6 @@ end
 ---@param opts table|nil  supports: dir (`cue -C`), store (`cue --store`)
 function M.pick_context_artifacts(context, opts)
   return require('cue.picker').pick_context_artifacts(context, opts)
-end
-
---- Open Telescope context file picker
-function M.pick_context()
-  return require('cue.picker').pick_context()
 end
 
 return M

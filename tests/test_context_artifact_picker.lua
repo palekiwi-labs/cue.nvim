@@ -617,6 +617,18 @@ check("the legacy task-scoped picker names are gone", function()
 	assert(picker.ui_pick == nil, "picker.ui_pick must be removed")
 end)
 
+-- pick_artifacts drove `cue list --task/--all/--include-gitignored`, none of
+-- which the CLI accepts any more, and pick_context shelled out to
+-- `cue context path --all`, which is not a subcommand. Both were unreachable
+-- rather than merely stale, so they were deleted instead of repaired.
+check("the master-board and context-path pickers are gone", function()
+	local cue = require("cue")
+	assert(picker.pick_artifacts == nil, "picker.pick_artifacts must be removed")
+	assert(cue.pick_artifacts == nil, "cue.pick_artifacts must be removed")
+	assert(picker.pick_context == nil, "picker.pick_context must be removed")
+	assert(cue.pick_context == nil, "cue.pick_context must be removed")
+end)
+
 if failures == 0 then
 	print("\nAll tests passed.")
 else
