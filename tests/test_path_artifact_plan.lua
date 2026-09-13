@@ -36,7 +36,9 @@ end
 
 local function count_keys(t)
 	local n = 0
-	for _ in pairs(t) do n = n + 1 end
+	for _ in pairs(t) do
+		n = n + 1
+	end
 	return n
 end
 
@@ -44,12 +46,14 @@ end
 check("trace json path is preserved with no frontmatter", function()
 	local plan = core.path_artifact_plan("trace", "crash-log.json", "master")
 	assert(plan ~= nil, "expected a plan, got nil")
-	assert(plan.filename == "crash-log.json",
-		"filename=" .. tostring(plan.filename))
+	assert(plan.filename == "crash-log.json", "filename=" .. tostring(plan.filename))
 	assert(plan.opts.category == "trace", "category=" .. tostring(plan.opts.category))
-	assert(plan.opts.task == "master", "task=" .. tostring(plan.opts.task))
-	assert(count_keys(plan.opts.frontmatter) == 0,
-		"non-markdown path must carry no frontmatter, got=" .. tostring(count_keys(plan.opts.frontmatter)))
+	assert(plan.opts.context == "master", "context=" .. tostring(plan.opts.context))
+	assert(plan.opts.task == nil, "task key should be gone, got=" .. tostring(plan.opts.task))
+	assert(
+		count_keys(plan.opts.frontmatter) == 0,
+		"non-markdown path must carry no frontmatter, got=" .. tostring(count_keys(plan.opts.frontmatter))
+	)
 end)
 
 -- Root placement is deleted, not defaulted: the key must be absent entirely
@@ -89,8 +93,10 @@ end)
 -- ...while the same type with a non-markdown extension gets none
 check("non-markdown path skips TYPE_DEFAULTS frontmatter", function()
 	local plan = core.path_artifact_plan("plan", "rollout.json", "master")
-	assert(count_keys(plan.opts.frontmatter) == 0,
-		"json path must carry no frontmatter, got=" .. tostring(count_keys(plan.opts.frontmatter)))
+	assert(
+		count_keys(plan.opts.frontmatter) == 0,
+		"json path must carry no frontmatter, got=" .. tostring(count_keys(plan.opts.frontmatter))
+	)
 end)
 
 -- spec: nested path preserved verbatim, which is the whole point of the
@@ -104,26 +110,25 @@ end)
 -- a type with no TYPE_DEFAULTS entry simply carries no frontmatter
 check("type without defaults carries no frontmatter", function()
 	local plan = core.path_artifact_plan("bin", "blob.json", "master")
-	assert(count_keys(plan.opts.frontmatter) == 0,
-		"bin has no defaults, got=" .. tostring(count_keys(plan.opts.frontmatter)))
+	assert(
+		count_keys(plan.opts.frontmatter) == 0,
+		"bin has no defaults, got=" .. tostring(count_keys(plan.opts.frontmatter))
+	)
 end)
 
 -- empty path -> nil
 check("empty path returns nil", function()
-	assert(core.path_artifact_plan("trace", "", "master") == nil,
-		"expected nil for empty path")
+	assert(core.path_artifact_plan("trace", "", "master") == nil, "expected nil for empty path")
 end)
 
 -- whitespace-only path -> nil
 check("whitespace-only path returns nil", function()
-	assert(core.path_artifact_plan("trace", "   ", "master") == nil,
-		"expected nil for whitespace path")
+	assert(core.path_artifact_plan("trace", "   ", "master") == nil, "expected nil for whitespace path")
 end)
 
 -- nil path -> nil
 check("nil path returns nil", function()
-	assert(core.path_artifact_plan("trace", nil, "master") == nil,
-		"expected nil for nil path")
+	assert(core.path_artifact_plan("trace", nil, "master") == nil, "expected nil for nil path")
 end)
 
 -- Root placement is deleted outright, table included.

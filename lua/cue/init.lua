@@ -53,37 +53,38 @@ function M.switch_context(slug, opts)
   return require('cue.core').switch_context(slug, opts)
 end
 
---- Prompt for a task slug, create the task card on master
-function M.add_task()
-  return require('cue.core').add_task()
+--- Prompt for a task slug, create the task card
+---@param context string|nil  context slug (nil = active/prompt)
+function M.add_task(context)
+  return require('cue.core').add_task(context)
 end
 
 --- Prompt for a slug, then add a markdown artifact (task/note).
 ---@param type string
----@param task string|nil  task context (nil = active/prompt)
-function M.add_with_slug(type, task)
-  return require('cue.core').add_with_slug(type, task)
+---@param context string|nil  context slug (nil = active/prompt)
+function M.add_with_slug(type, context)
+  return require('cue.core').add_with_slug(type, context)
 end
 
 --- Prompt for title, then add an artifact of the given type
 ---@param type string
----@param task string|nil  task context (nil = active)
-function M.add_with_title(type, task)
-  return require('cue.core').add_with_title(type, task)
+---@param context string|nil  context slug (nil = active/prompt)
+function M.add_with_title(type, context)
+  return require('cue.core').add_with_title(type, context)
 end
 
 --- Prompt for a file path (verbatim, extension preserved), then add an
 --- artifact of the given type with the type-intrinsic root policy
 ---@param type string
----@param task string|nil  task context (nil = active)
-function M.add_with_path(type, task)
-  return require('cue.core').add_with_path(type, task)
+---@param context string|nil  context slug (nil = active/prompt)
+function M.add_with_path(type, context)
+  return require('cue.core').add_with_path(type, context)
 end
 
---- Prompt for a spec path, then add a root spec artifact
----@param task string|nil  task context (nil = active)
-function M.add_spec(task)
-  return require('cue.core').add_spec(task)
+--- Prompt for a spec path, then add a spec artifact
+---@param context string|nil  context slug (nil = active/prompt)
+function M.add_spec(context)
+  return require('cue.core').add_spec(context)
 end
 
 -- ─── Re-export picker functions ───────────────────────────────────────────────

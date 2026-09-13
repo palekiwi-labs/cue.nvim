@@ -37,16 +37,21 @@ check("task plan carries the task frontmatter defaults", function()
 	assert(plan ~= nil, "expected a plan, got nil")
 	assert(plan.filename == "auth-login.md", "filename=" .. tostring(plan.filename))
 	assert(plan.opts.category == "task", "category=" .. tostring(plan.opts.category))
-	assert(plan.opts.task == "master", "task=" .. tostring(plan.opts.task))
+	assert(plan.opts.context == "master", "context=" .. tostring(plan.opts.context))
+	assert(plan.opts.task == nil, "task key should be gone, got=" .. tostring(plan.opts.task))
 	-- `inbox` was removed from task status: a task is triaged at the moment
 	-- it is written, so it starts `open` like every other type.
 	assert(plan.opts.frontmatter.status == "open", "frontmatter status")
 	assert(plan.opts.frontmatter.priority == "normal", "frontmatter priority")
 	-- `kind` moved to the context record; a task no longer carries one.
-	assert(plan.opts.frontmatter.kind == nil,
-		"task must not default a kind, got=" .. tostring(plan.opts.frontmatter.kind))
-	assert(plan.opts.frontmatter.title == "Auth Login",
-		"title derived from slug=" .. tostring(plan.opts.frontmatter.title))
+	assert(
+		plan.opts.frontmatter.kind == nil,
+		"task must not default a kind, got=" .. tostring(plan.opts.frontmatter.kind)
+	)
+	assert(
+		plan.opts.frontmatter.title == "Auth Login",
+		"title derived from slug=" .. tostring(plan.opts.frontmatter.title)
+	)
 end)
 
 -- Root placement is deleted, not defaulted: the key must be absent entirely
@@ -74,14 +79,16 @@ check("note plan carries the note frontmatter defaults", function()
 	assert(plan.filename == "my-idea.md", "filename=" .. tostring(plan.filename))
 	assert(plan.opts.frontmatter.status == "open", "frontmatter status")
 	assert(plan.opts.frontmatter.priority == nil, "note has no priority default")
-	assert(plan.opts.frontmatter.title == "My Idea", "title derived from slug=" .. tostring(plan.opts.frontmatter.title))
+	assert(
+		plan.opts.frontmatter.title == "My Idea",
+		"title derived from slug=" .. tostring(plan.opts.frontmatter.title)
+	)
 end)
 
 -- `todo` is removed from the model: a multi-item checklist is a plan and a
 -- single deferred obligation is a task. It must no longer be creatable.
 check("removed todo type returns nil", function()
-	assert(core.slug_artifact_plan("todo", "refactor", "master") == nil,
-		"expected nil plan for the removed todo type")
+	assert(core.slug_artifact_plan("todo", "refactor", "master") == nil, "expected nil plan for the removed todo type")
 end)
 
 -- slug normalisation: lowercase, spaces/punct stripped, hyphenated
@@ -103,8 +110,10 @@ end)
 -- refactor cannot silently re-break the production flow.
 check("normalised slug does NOT preserve acronyms (caller must pass raw)", function()
 	local plan = core.slug_artifact_plan("note", core.slugify("WSS-migration"), "master")
-	assert(plan.opts.frontmatter.title == "Wss Migration",
-		"normalised slug should lose acronym, got=" .. tostring(plan.opts.frontmatter.title))
+	assert(
+		plan.opts.frontmatter.title == "Wss Migration",
+		"normalised slug should lose acronym, got=" .. tostring(plan.opts.frontmatter.title)
+	)
 end)
 
 -- filename always ends with exactly one .md suffix
@@ -119,8 +128,10 @@ end)
 check("digit-only slug omits the title frontmatter", function()
 	local plan = core.slug_artifact_plan("note", "2026", "master")
 	assert(plan.filename == "2026.md", "filename=" .. tostring(plan.filename))
-	assert(plan.opts.frontmatter.title == nil,
-		"digit-only title should be omitted, got=" .. tostring(plan.opts.frontmatter.title))
+	assert(
+		plan.opts.frontmatter.title == nil,
+		"digit-only title should be omitted, got=" .. tostring(plan.opts.frontmatter.title)
+	)
 end)
 
 -- empty slug -> nil
@@ -153,10 +164,8 @@ end)
 -- trace are named artifacts at a caller-chosen path and belong to the path
 -- flow (path_artifact_plan / add_with_path).
 check("non-slug types (trace, spec) return nil", function()
-	assert(core.slug_artifact_plan("trace", "handoff", "master") == nil,
-		"expected nil plan for trace via slug flow")
-	assert(core.slug_artifact_plan("spec", "index", "master") == nil,
-		"expected nil plan for spec via slug flow")
+	assert(core.slug_artifact_plan("trace", "handoff", "master") == nil, "expected nil plan for trace via slug flow")
+	assert(core.slug_artifact_plan("spec", "index", "master") == nil, "expected nil plan for spec via slug flow")
 end)
 
 if failures == 0 then

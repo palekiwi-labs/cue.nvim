@@ -538,12 +538,12 @@ end
 --- Kept free of vim.* calls so it is unit-testable without Neovim.
 ---@param type string        artifact type ("task", "note")
 ---@param raw_slug string    user-entered slug text (normalised via slugify)
----@param task string        resolved cue scope slug (e.g. "master")
----@param extra_fm table|nil extra frontmatter fields (e.g. { kind = "design", parent = "refine-cue-skills" })
----@return table|nil  { filename=..., opts={ category, task, frontmatter } },
+---@param context string|nil resolved cue context slug (e.g. "auth-login")
+---@param extra_fm table|nil extra frontmatter fields (e.g. { parent = "refine-cue-skills" })
+---@return table|nil  { filename=..., opts={ category, context, frontmatter } },
 ---                   or nil when the type is not a slug type or the slug
 ---                   normalises to empty
-function M.slug_artifact_plan(type, raw_slug, task, extra_fm)
+function M.slug_artifact_plan(type, raw_slug, context, extra_fm)
   if not config.SLUG_TYPES[type] then
     return nil
   end
@@ -582,7 +582,7 @@ function M.slug_artifact_plan(type, raw_slug, task, extra_fm)
     filename = slug .. ".md",
     opts = {
       category    = type,
-      task        = task,
+      context     = context,
       frontmatter = frontmatter,
     },
   }
@@ -598,12 +598,12 @@ end
 --- corrupt a non-markdown file.
 ---
 --- Kept free of vim.* calls so it is unit-testable without Neovim.
----@param type string   artifact type (e.g. "trace", "spec")
----@param path string   user-entered file path, used verbatim
----@param task string   resolved cue scope slug (e.g. "master")
----@return table|nil  { filename=..., opts={ category, task, frontmatter } },
+---@param type string        artifact type (e.g. "trace", "spec")
+---@param path string        user-entered file path, used verbatim
+---@param context string|nil resolved cue context slug
+---@return table|nil  { filename=..., opts={ category, context, frontmatter } },
 ---                   or nil when the path is empty/whitespace-only
-function M.path_artifact_plan(type, path, task)
+function M.path_artifact_plan(type, path, context)
   if not path or path:match("%S") == nil then
     return nil
   end
@@ -618,7 +618,7 @@ function M.path_artifact_plan(type, path, task)
     filename = path,
     opts = {
       category    = type,
-      task        = task,
+      context     = context,
       frontmatter = frontmatter,
     },
   }
@@ -832,39 +832,83 @@ end
 
 --- Prompt the user to confirm (or change) the cue scope for a new artifact.
 ---
---- Short-circuits without a dialog in two cases:
----   1. type == "task": tasks always live in master; callback("master") immediately.
----   2. task ~= nil: the caller already pinned a scope (e.g. add_with_title("note",
----      "master")); callback(task) immediately (honours the explicit binding choice).
----
---- Otherwise shows a two-item Snacks select:
----   • "current: <active-slug>"  →  callback(active_slug)
----   • "select scope…"           →  opens a .cue/ subdirectory list, then callback(chosen)
----
----@param type string      artifact type ("task" bypasses the dialog)
----@param task string|nil  pre-set scope override, or nil to prompt
----@param callback function  called with the resolved task slug (string)
-function M.confirm_scope(type, task, callback)
-  if type == "task" then
-    callback("master")
-    return
+--- Pure helper that builds the argv table for `cue context list`.
+---@param opts table|nil  supports: dir (string, -C), store (string, --store)
+---@return string[]
+function M.list_contexts_argv(opts)
+  local cmd = { 'cue', 'context', 'list' }
+  if opts and opts.dir then
+    table.insert(cmd, '-C')
+    table.insert(cmd, opts.dir)
   end
+  if opts and opts.store then
+    table.insert(cmd, '--store')
+    table.insert(cmd, opts.store)
+  end
+  return cmd
+end
 
-  if task ~= nil then
-    callback(task)
+--- Return a sorted list of context slugs in the repository scope via `cue context list`.
+---@param opts table|nil  supports: dir (`cue -C`), store (`cue --store`)
+---@return string[]|nil
+function M.list_contexts(opts)
+  local cmd = M.list_contexts_argv(opts)
+  local output, _ = M.execute_command(cmd)
+  if not output or output == "" then
+    return nil
+  end
+  local contexts = {}
+  for line in output:gmatch("[^\r\n]+") do
+    local slug = vim.trim(line)
+    if slug ~= "" then
+      table.insert(contexts, slug)
+    end
+  end
+  table.sort(contexts)
+  return contexts
+end
+
+--- Confirm or prompt for target context for a new artifact.
+--- Short-circuits without a dialog when context ~= nil (honours explicit binding choice).
+--- Otherwise resolves the active context:
+---   • When active context exists: offers "current: <active-slug>" or "select context..."
+---   • When no active context exists: directly opens context selection
+---
+---@param type string         artifact type (e.g. "task", "note", "spec")
+---@param context string|nil  pre-set context override, or nil to prompt
+---@param callback function   called with the resolved context slug (string)
+function M.confirm_scope(type, context, callback)
+  if context ~= nil then
+    callback(context)
     return
   end
 
   local Snacks = require('snacks')
-  local active = M.get_active_task().context
+  local active = M.get_active_context()
+
+  local function select_from_all_contexts()
+    local contexts = M.list_contexts()
+    if not contexts or #contexts == 0 then
+      vim.notify("No contexts found. Create a context first with 'cue context create'.", vim.log.levels.ERROR)
+      return
+    end
+    Snacks.picker.select(contexts, { prompt = "Select context (" .. type .. "):" }, function(slug)
+      if slug then callback(slug) end
+    end)
+  end
+
+  if not active then
+    select_from_all_contexts()
+    return
+  end
 
   local items = {
-    { label = "current: " .. active, value = active      },
-    { label = "select scope...",     value = "__pick__"  },
+    { label = "current: " .. active, value = active },
+    { label = "select context...",   value = "__pick__" },
   }
 
   Snacks.picker.select(items, {
-    prompt = "Scope for new artifact:",
+    prompt = "Context for new " .. type .. ":",
     format_item = function(item) return item.label end,
   }, function(choice)
     if not choice then return end
@@ -872,18 +916,7 @@ function M.confirm_scope(type, task, callback)
       callback(choice.value)
       return
     end
-
-    -- Scope list is driven by task-card slugs (always includes "master"),
-    -- not by existing context directories. `cue add --task <slug>` creates
-    -- the context dir on demand, so a task with no dir yet is selectable.
-    local scopes = M.list_scopes()
-    if not scopes then
-      vim.notify("No .cue directory found", vim.log.levels.ERROR)
-      return
-    end
-    Snacks.picker.select(scopes, { prompt = "Select scope:" }, function(slug)
-      if slug then callback(slug) end
-    end)
+    select_from_all_contexts()
   end)
 end
 
@@ -980,9 +1013,20 @@ function M.add(filename, opts)
     table.insert(cmd, opts.category)
   end
 
-  if opts.task then
-    table.insert(cmd, '--task')
-    table.insert(cmd, opts.task)
+  local context = opts.context or opts.task
+  if context then
+    table.insert(cmd, '--context')
+    table.insert(cmd, context)
+  end
+
+  if opts.dir then
+    table.insert(cmd, '-C')
+    table.insert(cmd, opts.dir)
+  end
+
+  if opts.store then
+    table.insert(cmd, '--store')
+    table.insert(cmd, opts.store)
   end
 
   if opts.frontmatter then
@@ -1095,14 +1139,14 @@ end
 --- Prompt for a slug, confirm scope, then add a markdown artifact of the
 --- given type (task/note).
 ---
---- When task is non-nil the scope dialog is skipped (caller already pinned
---- scope). The scope dialog is also skipped for type == "task" (always master).
+--- When context is non-nil the scope dialog is skipped (caller already pinned
+--- context).
 --- Types outside config.SLUG_TYPES are rejected up front: their filenames are
 --- caller-chosen paths, so they belong to add_with_path instead.
 ---@param type string  artifact type ("task", "note")
----@param task string|nil  override task context (nil = prompt via confirm_scope)
+---@param context string|nil  override context (nil = prompt via confirm_scope)
 ---@param extra_fm table|nil  extra frontmatter fields (e.g. { parent = "refine-cue-skills" })
-function M.add_with_slug(type, task, extra_fm)
+function M.add_with_slug(type, context, extra_fm)
   if not config.SLUG_TYPES[type] then
     vim.notify(
       "Error: '" .. type .. "' is not a slug-based markdown type; use add_with_path",
@@ -1122,39 +1166,39 @@ function M.add_with_slug(type, task, extra_fm)
       vim.notify("Error: slug is empty after normalisation", vim.log.levels.ERROR)
       return
     end
-    M.confirm_scope(type, task, function(target_task)
-      local plan = M.slug_artifact_plan(type, raw_slug, target_task, extra_fm)
+    M.confirm_scope(type, context, function(target_context)
+      local plan = M.slug_artifact_plan(type, raw_slug, target_context, extra_fm)
       M.add(plan.filename, plan.opts)
     end)
   end)
 end
 
---- Prompt for a task slug, then create the task card on master.
---- Tasks always live in .cue/master/task/; no scope dialog is shown.
+--- Prompt for a task slug, then create the task card.
 --- The slug is used as the filename stem (e.g. "my-feature" → "my-feature.md").
-function M.add_task()
-  M.add_with_slug("task", "master")
+---@param context string|nil  override context (nil = prompt via confirm_scope)
+function M.add_task(context)
+  M.add_with_slug("task", context)
 end
 
 --- Prompt for a title, then confirm scope, then add an artifact of the given type.
---- When task is non-nil the scope dialog is skipped (caller already pinned scope).
+--- When context is non-nil the scope dialog is skipped (caller already pinned context).
 ---@param type string  artifact type (e.g. "task", "plan", "note")
----@param task string|nil  override task context (nil = prompt via confirm_scope)
-function M.add_with_title(type, task)
+---@param context string|nil  override context (nil = prompt via confirm_scope)
+function M.add_with_title(type, context)
   local Snacks = require('snacks')
   Snacks.input({
     prompt = "Title (" .. type .. "):",
     win = { row = 0.3 },
   }, function(title)
     if not title or title == "" then return end
-    M.confirm_scope(type, task, function(target_task)
+    M.confirm_scope(type, context, function(target_context)
       local filename = M.slugify(title) .. ".md"
       local defaults = config.TYPE_DEFAULTS[type] or {}
       -- Title wins over TYPE_DEFAULTS (matches slug_artifact_plan ordering).
       local frontmatter = vim.tbl_extend("force", defaults, { title = title })
       M.add(filename, {
         category    = type,
-        task        = target_task,
+        context     = target_context,
         frontmatter = frontmatter,
       })
     end)
@@ -1164,10 +1208,10 @@ end
 --- Prompt for a file path, then confirm scope, then add an artifact of the
 --- given type. The path is used verbatim, so nested paths and non-markdown
 --- extensions survive intact.
---- When task is non-nil the scope dialog is skipped (caller already pinned scope).
+--- When context is non-nil the scope dialog is skipped (caller already pinned context).
 ---@param type string  artifact type (e.g. "trace", "spec")
----@param task string|nil  override task context (nil = prompt via confirm_scope)
-function M.add_with_path(type, task)
+---@param context string|nil  override context (nil = prompt via confirm_scope)
+function M.add_with_path(type, context)
   local Snacks = require('snacks')
   Snacks.input({
     prompt = "Path (" .. type .. "):",
@@ -1175,8 +1219,8 @@ function M.add_with_path(type, task)
     win = { row = 0.3 },
   }, function(path)
     if not path or path == "" then return end
-    M.confirm_scope(type, task, function(target_task)
-      local plan = M.path_artifact_plan(type, path, target_task)
+    M.confirm_scope(type, context, function(target_context)
+      local plan = M.path_artifact_plan(type, path, target_context)
       if not plan then
         vim.notify("Error: path is empty", vim.log.levels.ERROR)
         return
@@ -1187,9 +1231,9 @@ function M.add_with_path(type, task)
 end
 
 --- Prompt for a spec path, then confirm scope, then add a spec artifact.
---- When task is non-nil the scope dialog is skipped (caller already pinned scope).
----@param task string|nil  override task context (nil = prompt via confirm_scope)
-function M.add_spec(task)
+--- When context is non-nil the scope dialog is skipped (caller already pinned context).
+---@param context string|nil  override context (nil = prompt via confirm_scope)
+function M.add_spec(context)
   local Snacks = require('snacks')
   Snacks.input({
     prompt = "Spec path:",
@@ -1197,8 +1241,8 @@ function M.add_spec(task)
     win = { row = 0.3 },
   }, function(path)
     if not path or path == "" then return end
-    M.confirm_scope("spec", task, function(target_task)
-      M.add(path, { category = "spec", task = target_task })
+    M.confirm_scope("spec", context, function(target_context)
+      M.add(path, { category = "spec", context = target_context })
     end)
   end)
 end

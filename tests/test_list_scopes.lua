@@ -35,7 +35,10 @@ check("scope_set({}) returns { 'master' }", function()
 end)
 
 check("scope_set with slugs returns sorted slugs plus master", function()
-  assert_list_equal(core.scope_set({ "fix-scope-selection.md", "auth-login.md" }), { "auth-login", "fix-scope-selection", "master" })
+  assert_list_equal(
+    core.scope_set({ "fix-scope-selection.md", "auth-login.md" }),
+    { "auth-login", "fix-scope-selection", "master" }
+  )
 end)
 
 check("scope_set dedups slugs", function()

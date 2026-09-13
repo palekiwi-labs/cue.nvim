@@ -27,12 +27,12 @@ local function parse_args(args)
 end
 
 --- Build opts table for core.add() from parsed args.
---- Known kwarg (task) becomes an opts field;
+--- Known kwarg (context/task) becomes an opts field;
 --- remaining kwargs become frontmatter key=value pairs.
 local function build_add_opts(category, parsed)
   local frontmatter = nil
   for k, v in pairs(parsed.kwargs) do
-    if k ~= "task" then
+    if k ~= "context" and k ~= "task" then
       frontmatter = frontmatter or {}
       frontmatter[k] = v
     end
@@ -40,7 +40,7 @@ local function build_add_opts(category, parsed)
   return {
     category    = category == "spec" and nil or category,
     force       = parsed.flags.force and true or nil,
-    task        = parsed.kwargs.task,
+    context     = parsed.kwargs.context or parsed.kwargs.task,
     frontmatter = frontmatter,
   }
 end
@@ -90,17 +90,7 @@ function M.setup()
   local function run_wizard()
     select_category(function(category)
       -- task/note share the slug-prompt flow with a wizard parent prompt.
-      if category == "task" then
-        core.prompt_task_kind(function(kind)
-          core.prompt_parent(function(parent)
-            local fm = {}
-            if kind then fm.kind = kind end
-            if parent then fm.parent = parent end
-            core.add_with_slug("task", "master", fm)
-          end)
-        end)
-        return
-      elseif category == "note" then
+      if category == "task" or category == "note" then
         core.prompt_parent(function(parent)
           local fm = {}
           if parent then fm.parent = parent end
@@ -110,14 +100,14 @@ function M.setup()
       end
 
       prompt_filename(category, function(filename)
-        -- confirm_scope shows the two-item scope dialog for non-task types.
-        core.confirm_scope(category, nil, function(task)
+        -- confirm_scope shows the scope dialog for non-task types.
+        core.confirm_scope(category, nil, function(context)
           core.prompt_parent(function(parent)
             local fm = {}
             if parent then fm.parent = parent end
             core.add(filename, {
               category    = category == "spec" and nil or category,
-              task        = task,
+              context     = context,
               frontmatter = fm,
             })
           end)
@@ -163,7 +153,7 @@ function M.setup()
     end
   end, {
     nargs = "*",
-    desc  = "Add a cue artifact (no args = wizard; e.g. :CueAdd note weekly.md task=master)",
+    desc  = "Add a cue artifact (no args = wizard; e.g. :CueAdd note weekly.md context=my-feature)",
   })
 
   -- :CueLog [task]
