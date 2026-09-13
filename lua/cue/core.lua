@@ -783,16 +783,54 @@ function M.open_active_task()
   vim.cmd.edit(decision.path)
 end
 
---- Switch the active cue context. `cue switch` also maintains the
---- branch-to-task association in git config.
----@param slug string  task slug or "master"
-function M.switch_context(slug)
-  local obj = vim.system({ 'cue', 'switch', slug }, { text = true }):wait()
+--- Build the `cue context switch <slug>` argv.
+---
+--- The legacy top-level `cue switch` is gone: in the central-store model the
+--- branch association is written by `cue context switch`, which requires an
+--- explicit slug. There is no "master" fallback to substitute for a missing
+--- one, so a blank/non-string slug returns nil rather than an argv.
+---
+--- Kept free of vim.* calls so it is unit-testable without Neovim.
+---@param slug string|nil  context slug (required)
+---@param opts table|nil   supports: dir (string, -C), store (string, --store)
+---@return table|nil  argv list, or nil when the slug is missing
+function M.switch_context_argv(slug, opts)
+  local ctx = M.normalize_context(slug)
+  if not ctx then
+    return nil
+  end
+  opts = opts or {}
+
+  local cmd = { 'cue', 'context', 'switch' }
+  if type(opts.dir) == "string" and opts.dir ~= "" then
+    table.insert(cmd, '-C')
+    table.insert(cmd, opts.dir)
+  end
+  if type(opts.store) == "string" and opts.store ~= "" then
+    table.insert(cmd, '--store')
+    table.insert(cmd, opts.store)
+  end
+  table.insert(cmd, ctx)
+  return cmd
+end
+
+--- Associate a cue context with the current git branch.
+--- Writes `branch.<branch>.cue-context` via `cue context switch`.
+---@param slug string  context slug
+---@param opts table|nil  supports: dir (string, -C), store (string, --store)
+function M.switch_context(slug, opts)
+  local cmd = M.switch_context_argv(slug, opts)
+  if not cmd then
+    vim.notify("cue: a context slug is required to switch", vim.log.levels.ERROR)
+    return
+  end
+
+  local obj = vim.system(cmd, { text = true }):wait()
   if obj.code == 0 then
-    vim.notify("cue: switched to " .. slug, vim.log.levels.INFO)
+    vim.notify("cue: switched to " .. cmd[#cmd], vim.log.levels.INFO)
   else
     local msg = vim.trim((obj.stderr or "") ~= "" and obj.stderr or (obj.stdout or "unknown"))
-    vim.notify("cue switch failed: " .. msg, vim.log.levels.ERROR)
+    vim.notify("cue context switch failed: " .. msg, vim.log.levels.ERROR)
   end
 end
 
