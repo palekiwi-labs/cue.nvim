@@ -370,6 +370,82 @@ function M.context_artifacts_view(artifacts)
   return rows
 end
 
+--- The context browser's row label: the context title when it is a nonempty
+--- string, else the slug. Mirrors artifact_display_title, including its
+--- refusal of non-string titles: YAML emits an unquoted numeric title as a
+--- number, which cannot be rendered as a display column.
+---@param ctx table|nil  a `cue context list --json` row
+---@return string
+function M.context_display_title(ctx)
+  if not ctx or ctx == vim.NIL or type(ctx) ~= "table" then
+    return ""
+  end
+  local title = ctx.title
+  if type(title) == "string" and title:match("%S") then
+    return title
+  end
+  return ctx.context or ""
+end
+
+--- Comparator for the context browser: recency descending (newest first),
+--- then the displayed title, then the slug.
+---
+--- Contexts with no recency sort after every context that has one, rather
+--- than being treated as infinitely old duplicates of each other: a context
+--- that has never been logged in has no position on the recency axis at all.
+---
+--- Title comparison is case-insensitive, and the slug is the final
+--- discriminator because table.sort is not stable and titles are not unique.
+---@param a table
+---@param b table
+---@return boolean
+function M.context_less(a, b)
+  local a_recency = a.recency
+  local b_recency = b.recency
+  if a_recency ~= b_recency then
+    if not a_recency then return false end
+    if not b_recency then return true end
+    return a_recency > b_recency
+  end
+
+  local a_title = M.context_display_title(a):lower()
+  local b_title = M.context_display_title(b):lower()
+  if a_title ~= b_title then
+    return a_title < b_title
+  end
+
+  return (a.context or "") < (b.context or "")
+end
+
+--- Turn a decoded `cue context list --json` payload into the browser's rows:
+--- drop malformed entries, attach each context's recency, then order by
+--- context_less.
+---
+--- Recency is passed in rather than read from the payload. `cue context list`
+--- carries `created_at` only, and the spec defines recency exclusively as the
+--- timestamp of the latest context log entry, which creation time does not
+--- approximate: a context created months ago and logged into this morning is
+--- the most recent one.
+---@param contexts table|nil  decoded `cue context list --json` output
+---@param recency table|nil   slug -> timestamp map; missing slugs have no log
+---@return table  ordered rows (never nil)
+function M.context_list_view(contexts, recency)
+  local rows = {}
+  if type(contexts) ~= "table" then
+    return rows
+  end
+  for _, ctx in ipairs(contexts) do
+    if type(ctx) == "table"
+       and type(ctx.context) == "string"
+       and type(ctx.path) == "string" then
+      ctx.recency = recency and recency[ctx.context] or nil
+      rows[#rows + 1] = ctx
+    end
+  end
+  table.sort(rows, M.context_less)
+  return rows
+end
+
 -- Numeric sort rank for a marker: "*" (0) < "!" (1) < " " (2).
 local function marker_rank(marker)
   if marker == "*" then return 0 end
@@ -837,6 +913,9 @@ end
 ---@return string[]
 function M.list_contexts_argv(opts)
   local cmd = { 'cue', 'context', 'list' }
+  if opts and opts.json then
+    table.insert(cmd, '--json')
+  end
   if opts and opts.dir then
     table.insert(cmd, '-C')
     table.insert(cmd, opts.dir)
