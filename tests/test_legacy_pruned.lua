@@ -55,6 +55,29 @@ check("the task-kind prompt is gone", function()
 	assert_absent(core, "prompt_task_kind", "core")
 end)
 
+-- Resolved the active TASK, falling back to `{ context = "master" }`. There
+-- is no master and no fallback: cue status returns an unset context, and
+-- core.get_active_context reports that honestly as nil.
+check("the master-fallback status reader is gone", function()
+	assert_absent(core, "get_active_task", "core")
+end)
+
+-- The rendering and ordering layer of the deleted master-board task picker.
+-- Marker column ("*" active / "!" in-progress), done-dimming highlights, tag
+-- column, board status filters and the composite row comparator. All of it
+-- described a board that no longer exists; a context-first task view will be
+-- specified against the new model rather than ported from this one.
+check("the task-board row helpers are gone", function()
+	assert_absent(core, "task_marker_for", "core")
+	assert_absent(core, "task_less", "core")
+	assert_absent(core, "task_tags", "core")
+	assert_absent(core, "task_status_excluded", "core")
+	assert_absent(core, "type_excluded", "core")
+	assert_absent(core, "done_highlight_for", "core")
+	assert_absent(core, "is_done", "core")
+	assert_absent(core, "is_finished", "core")
+end)
+
 if failures == 0 then
 	print("\nAll tests passed.")
 else
