@@ -2,10 +2,12 @@
 -- Run: luajit tests/test_slug_artifact_plan.lua
 --
 -- slug_artifact_plan is the pure, vim-free helper behind the unified
--- slug-prompt creation flow (task/note/todo). It encodes the type-intrinsic
--- root policy (task/note = root/flat, todo = pinned) and the frontmatter
--- defaults, returning a { filename, opts } plan or nil when the slug
--- normalises to empty.
+-- slug-prompt creation flow (task/note). It encodes slug-flow membership
+-- (config.SLUG_TYPES) and the frontmatter defaults, returning a
+-- { filename, opts } plan or nil when the slug normalises to empty.
+--
+-- Root placement is gone: every markdown artifact is a named file at
+-- <type>/<name>.md, so there is no root/pinned distinction left to encode.
 --
 -- Mocks the minimal `vim` global so the real module can be required without
 -- a running Neovim instance.
@@ -29,21 +31,31 @@ local function check(name, fn)
 	end
 end
 
--- task -> root=true, scope=master, task frontmatter defaults
-check("task plan places artifact at root with master scope", function()
+-- task -> task frontmatter defaults, no root key
+check("task plan carries the task frontmatter defaults", function()
 	local plan = core.slug_artifact_plan("task", "auth-login", "master")
 	assert(plan ~= nil, "expected a plan, got nil")
 	assert(plan.filename == "auth-login.md", "filename=" .. tostring(plan.filename))
 	assert(plan.opts.category == "task", "category=" .. tostring(plan.opts.category))
 	assert(plan.opts.task == "master", "task=" .. tostring(plan.opts.task))
-	assert(plan.opts.root == true, "root should be true for task")
-	-- tasks enter the board as "inbox" for operator triage; other types
-	-- keep "open" (see note plan below).
-	assert(plan.opts.frontmatter.status == "inbox", "frontmatter status")
+	-- `inbox` was removed from task status: a task is triaged at the moment
+	-- it is written, so it starts `open` like every other type.
+	assert(plan.opts.frontmatter.status == "open", "frontmatter status")
 	assert(plan.opts.frontmatter.priority == "normal", "frontmatter priority")
-	assert(plan.opts.frontmatter.kind == "build", "frontmatter default kind should be build")
+	-- `kind` moved to the context record; a task no longer carries one.
+	assert(plan.opts.frontmatter.kind == nil,
+		"task must not default a kind, got=" .. tostring(plan.opts.frontmatter.kind))
 	assert(plan.opts.frontmatter.title == "Auth Login",
 		"title derived from slug=" .. tostring(plan.opts.frontmatter.title))
+end)
+
+-- Root placement is deleted, not defaulted: the key must be absent entirely
+-- so a stale `opts.root` reader fails loudly rather than reading false.
+check("plan emits no root key at all", function()
+	local plan = core.slug_artifact_plan("task", "auth-login", "master")
+	assert(plan.opts.root == nil, "root key should be gone, got=" .. tostring(plan.opts.root))
+	local note = core.slug_artifact_plan("note", "my-idea", "master")
+	assert(note.opts.root == nil, "root key should be gone, got=" .. tostring(note.opts.root))
 end)
 
 check("task plan accepts extra_fm for kind and parent", function()
@@ -56,22 +68,20 @@ check("task plan accepts extra_fm for kind and parent", function()
 	assert(plan.opts.frontmatter.parent == "refine-cue-skills", "parent=" .. tostring(plan.opts.frontmatter.parent))
 end)
 
--- note -> root=true, note has no priority default
-check("note plan places artifact at root", function()
+-- note has no priority default
+check("note plan carries the note frontmatter defaults", function()
 	local plan = core.slug_artifact_plan("note", "my-idea", "master")
-	assert(plan.opts.root == true, "note should be root")
 	assert(plan.filename == "my-idea.md", "filename=" .. tostring(plan.filename))
 	assert(plan.opts.frontmatter.status == "open", "frontmatter status")
 	assert(plan.opts.frontmatter.priority == nil, "note has no priority default")
 	assert(plan.opts.frontmatter.title == "My Idea", "title derived from slug=" .. tostring(plan.opts.frontmatter.title))
 end)
 
--- todo -> root=false (pinned / point-in-time)
-check("todo plan is pinned (root=false)", function()
-	local plan = core.slug_artifact_plan("todo", "refactor", "master")
-	assert(plan.opts.root == false, "todo should NOT be root")
-	assert(plan.filename == "refactor.md", "filename=" .. tostring(plan.filename))
-	assert(plan.opts.frontmatter.title == "Refactor", "title derived from slug=" .. tostring(plan.opts.frontmatter.title))
+-- `todo` is removed from the model: a multi-item checklist is a plan and a
+-- single deferred obligation is a task. It must no longer be creatable.
+check("removed todo type returns nil", function()
+	assert(core.slug_artifact_plan("todo", "refactor", "master") == nil,
+		"expected nil plan for the removed todo type")
 end)
 
 -- slug normalisation: lowercase, spaces/punct stripped, hyphenated
@@ -128,19 +138,25 @@ check("slug that normalises empty returns nil", function()
 	assert(core.slug_artifact_plan("task", "!@#$", "master") == nil, "expected nil for punct-only slug")
 end)
 
--- SLUG_ROOT policy is data-driven and matches the cue skill spec
-check("SLUG_ROOT encodes task/note=root, todo=pinned", function()
-	assert(config.SLUG_ROOT.task == true, "task should be root")
-	assert(config.SLUG_ROOT.note == true, "note should be root")
-	assert(config.SLUG_ROOT.todo == false, "todo should be pinned")
+-- SLUG_TYPES is the membership half of the deleted SLUG_ROOT table: it says
+-- which types use the slug flow, and no longer says anything about placement.
+check("SLUG_TYPES admits task and note only", function()
+	assert(config.SLUG_TYPES.task == true, "task should be a slug type")
+	assert(config.SLUG_TYPES.note == true, "note should be a slug type")
+	assert(config.SLUG_TYPES.todo == nil, "todo is a removed type")
+	assert(config.SLUG_TYPES.spec == nil, "spec belongs to the path flow")
+	assert(config.SLUG_TYPES.trace == nil, "trace belongs to the path flow")
 end)
 
--- Types outside SLUG_ROOT are rejected: routing e.g. a trace through the
--- slug flow silently renamed it to <slug>.md, destroying the real
--- extension (traces are often JSON, not markdown).
-check("non-slug types (trace) return nil", function()
-	assert(core.slug_artifact_plan("trace", "crash-log.json", "master") == nil,
+-- The deleted root policy must not take the membership guard with it: the
+-- slug flow slugifies and forces .md, which destroys a real path. spec and
+-- trace are named artifacts at a caller-chosen path and belong to the path
+-- flow (path_artifact_plan / add_with_path).
+check("non-slug types (trace, spec) return nil", function()
+	assert(core.slug_artifact_plan("trace", "handoff", "master") == nil,
 		"expected nil plan for trace via slug flow")
+	assert(core.slug_artifact_plan("spec", "index", "master") == nil,
+		"expected nil plan for spec via slug flow")
 end)
 
 if failures == 0 then

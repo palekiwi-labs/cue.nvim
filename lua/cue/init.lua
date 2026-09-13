@@ -5,8 +5,8 @@
 ---
 --- All public functions are re-exported here so callers can do:
 ---   local cue = require('cue')
----   cue.pick_artifacts({ type = "todo" })
----   cue.add_with_title("todo")
+---   cue.pick_artifacts({ type = "note" })
+---   cue.add_with_title("note")
 ---   etc.
 
 local M = {}
@@ -58,8 +58,7 @@ function M.add_task()
   return require('cue.core').add_task()
 end
 
---- Prompt for a slug, then add a markdown artifact (task/note/todo).
---- Uses the type-intrinsic root policy; no root Yes/No prompt.
+--- Prompt for a slug, then add a markdown artifact (task/note).
 ---@param type string
 ---@param task string|nil  task context (nil = active/prompt)
 function M.add_with_slug(type, task)

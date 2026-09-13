@@ -527,25 +527,24 @@ function M.slug_to_title(text)
 end
 
 --- Pure helper that computes the filename and add() opts for a slug-based
---- artifact of a markdown type (task/note/todo). Encodes the type-intrinsic
---- root policy (config.SLUG_ROOT) and the frontmatter defaults
---- (config.TYPE_DEFAULTS).
+--- artifact of a markdown type (task/note). Encodes slug-flow membership
+--- (config.SLUG_TYPES) and the frontmatter defaults (config.TYPE_DEFAULTS).
 ---
---- Returns nil for types outside config.SLUG_ROOT: routing e.g. a trace
---- through the slug flow silently renamed it to <slug>.md, destroying the
---- real extension (traces are often JSON, not markdown). Those types belong
---- to the path flow (see path_artifact_plan / add_with_path).
+--- Returns nil for types outside config.SLUG_TYPES: the slug flow slugifies
+--- the entered name and forces a .md extension, which destroys a real path.
+--- Those types belong to the path flow (see path_artifact_plan /
+--- add_with_path).
 ---
 --- Kept free of vim.* calls so it is unit-testable without Neovim.
----@param type string        artifact type ("task", "note", "todo")
+---@param type string        artifact type ("task", "note")
 ---@param raw_slug string    user-entered slug text (normalised via slugify)
 ---@param task string        resolved cue scope slug (e.g. "master")
 ---@param extra_fm table|nil extra frontmatter fields (e.g. { kind = "design", parent = "refine-cue-skills" })
----@return table|nil  { filename=..., opts={ category, task, root, frontmatter } },
+---@return table|nil  { filename=..., opts={ category, task, frontmatter } },
 ---                   or nil when the type is not a slug type or the slug
 ---                   normalises to empty
 function M.slug_artifact_plan(type, raw_slug, task, extra_fm)
-  if config.SLUG_ROOT[type] == nil then
+  if not config.SLUG_TYPES[type] then
     return nil
   end
   local slug = M.slugify(raw_slug)
@@ -584,7 +583,6 @@ function M.slug_artifact_plan(type, raw_slug, task, extra_fm)
     opts = {
       category    = type,
       task        = task,
-      root        = config.SLUG_ROOT[type] and true or false,
       frontmatter = frontmatter,
     },
   }
@@ -592,21 +590,18 @@ end
 
 --- Pure helper that computes the filename and add() opts for a path-based
 --- artifact (e.g. trace, spec). The path is used VERBATIM: no slugification
---- and no forced extension, because path-flow artifacts are frequently JSON
---- or plain text rather than markdown.
+--- and no forced extension, so nested paths (spec/index.md, a nested note)
+--- and non-markdown types survive intact.
 ---
 --- Frontmatter defaults (config.TYPE_DEFAULTS) apply only to markdown (.md)
 --- paths: `cue add` prepends YAML frontmatter unconditionally, which would
 --- corrupt a non-markdown file.
 ---
---- Root placement follows the type-intrinsic policy (config.PATH_ROOT);
---- unlisted types default to pinned/point-in-time.
----
 --- Kept free of vim.* calls so it is unit-testable without Neovim.
 ---@param type string   artifact type (e.g. "trace", "spec")
 ---@param path string   user-entered file path, used verbatim
 ---@param task string   resolved cue scope slug (e.g. "master")
----@return table|nil  { filename=..., opts={ category, task, root, frontmatter } },
+---@return table|nil  { filename=..., opts={ category, task, frontmatter } },
 ---                   or nil when the path is empty/whitespace-only
 function M.path_artifact_plan(type, path, task)
   if not path or path:match("%S") == nil then
@@ -624,7 +619,6 @@ function M.path_artifact_plan(type, path, task)
     opts = {
       category    = type,
       task        = task,
-      root        = config.PATH_ROOT[type] and true or false,
       frontmatter = frontmatter,
     },
   }
@@ -840,7 +834,7 @@ end
 ---
 --- Short-circuits without a dialog in two cases:
 ---   1. type == "task": tasks always live in master; callback("master") immediately.
----   2. task ~= nil: the caller already pinned a scope (e.g. add_with_title("todo",
+---   2. task ~= nil: the caller already pinned a scope (e.g. add_with_title("note",
 ---      "master")); callback(task) immediately (honours the explicit binding choice).
 ---
 --- Otherwise shows a two-item Snacks select:
@@ -986,10 +980,6 @@ function M.add(filename, opts)
     table.insert(cmd, opts.category)
   end
 
-  if opts.root then
-    table.insert(cmd, '--root')
-  end
-
   if opts.task then
     table.insert(cmd, '--task')
     table.insert(cmd, opts.task)
@@ -1010,11 +1000,6 @@ function M.add(filename, opts)
         table.insert(cmd, string.format("%s=%s", k, v))
       end
     end
-  end
-
-  if opts.commit and (opts.category == "trace" or opts.category == "tmp") then
-    table.insert(cmd, '--commit')
-    table.insert(cmd, opts.commit)
   end
 
   if opts.force then
@@ -1108,18 +1093,17 @@ function M.prompt_parent(callback)
 end
 
 --- Prompt for a slug, confirm scope, then add a markdown artifact of the
---- given type (task/note/todo). Uses the type-intrinsic root policy encoded
---- in config.SLUG_ROOT; no root Yes/No prompt is shown.
+--- given type (task/note).
 ---
 --- When task is non-nil the scope dialog is skipped (caller already pinned
 --- scope). The scope dialog is also skipped for type == "task" (always master).
---- Types outside config.SLUG_ROOT are rejected up front: their filenames are
---- real paths (often non-markdown), so they belong to add_with_path instead.
----@param type string  artifact type ("task", "note", "todo")
+--- Types outside config.SLUG_TYPES are rejected up front: their filenames are
+--- caller-chosen paths, so they belong to add_with_path instead.
+---@param type string  artifact type ("task", "note")
 ---@param task string|nil  override task context (nil = prompt via confirm_scope)
----@param extra_fm table|nil  extra frontmatter fields (e.g. { kind = "design", parent = "refine-cue-skills" })
+---@param extra_fm table|nil  extra frontmatter fields (e.g. { parent = "refine-cue-skills" })
 function M.add_with_slug(type, task, extra_fm)
-  if config.SLUG_ROOT[type] == nil then
+  if not config.SLUG_TYPES[type] then
     vim.notify(
       "Error: '" .. type .. "' is not a slug-based markdown type; use add_with_path",
       vim.log.levels.ERROR
@@ -1154,7 +1138,7 @@ end
 
 --- Prompt for a title, then confirm scope, then add an artifact of the given type.
 --- When task is non-nil the scope dialog is skipped (caller already pinned scope).
----@param type string  artifact type (e.g. "task", "todo", "plan", "doc")
+---@param type string  artifact type (e.g. "task", "plan", "note")
 ---@param task string|nil  override task context (nil = prompt via confirm_scope)
 function M.add_with_title(type, task)
   local Snacks = require('snacks')
@@ -1171,7 +1155,6 @@ function M.add_with_title(type, task)
       M.add(filename, {
         category    = type,
         task        = target_task,
-        root        = type == "task",
         frontmatter = frontmatter,
       })
     end)
@@ -1179,9 +1162,8 @@ function M.add_with_title(type, task)
 end
 
 --- Prompt for a file path, then confirm scope, then add an artifact of the
---- given type. The path is used verbatim (extension preserved -- traces are
---- often JSON, not markdown); root placement follows the type-intrinsic
---- policy (config.PATH_ROOT, defaulting to pinned/point-in-time).
+--- given type. The path is used verbatim, so nested paths and non-markdown
+--- extensions survive intact.
 --- When task is non-nil the scope dialog is skipped (caller already pinned scope).
 ---@param type string  artifact type (e.g. "trace", "spec")
 ---@param task string|nil  override task context (nil = prompt via confirm_scope)
@@ -1204,7 +1186,7 @@ function M.add_with_path(type, task)
   end)
 end
 
---- Prompt for a spec path, then confirm scope, then add a root spec artifact.
+--- Prompt for a spec path, then confirm scope, then add a spec artifact.
 --- When task is non-nil the scope dialog is skipped (caller already pinned scope).
 ---@param task string|nil  override task context (nil = prompt via confirm_scope)
 function M.add_spec(task)
@@ -1216,7 +1198,7 @@ function M.add_spec(task)
   }, function(path)
     if not path or path == "" then return end
     M.confirm_scope("spec", task, function(target_task)
-      M.add(path, { category = "spec", task = target_task, root = true })
+      M.add(path, { category = "spec", task = target_task })
     end)
   end)
 end

@@ -17,36 +17,30 @@ M.PRIORITY_RANK = {
   low      = 3,
 }
 
+-- Frontmatter defaults per artifact type. Every type starts at "open":
+-- `inbox` was removed from task status, because a captured idea becomes a
+-- note and a task is therefore created deliberately and triaged as it is
+-- written. Tasks carry no `kind` default either -- `kind` is a context
+-- field (work/coord/reference) and says what ends the context, not what a
+-- task is.
 M.TYPE_DEFAULTS = {
-  -- Tasks enter the board as "inbox" for operator triage (dedicated
-  -- inbox picker; hidden from the board via HIDDEN_TASK_STATUSES).
-  -- Other types keep "open".
-  task = { status = "inbox", priority = "normal", kind = "build" },
-  todo = { status = "open", priority = "normal" },
+  task = { status = "open", priority = "normal" },
   plan = { status = "open", priority = "normal" },
   note = { status = "open" },
 }
 
--- Type-intrinsic root placement policy for the markdown types that share the
--- slug-prompt creation flow (task/note/todo). Drives `slug_artifact_plan`.
---   task -> root (flat, lives on master)
---   note -> root (flat, stored root-level per cue skill)
---   todo -> NOT root (pinned / point-in-time)
-M.SLUG_ROOT = {
+-- Membership test for the slug-prompt creation flow, which slugifies the
+-- entered name and forces a .md extension. Drives `slug_artifact_plan`.
+--
+-- This is the surviving half of the deleted SLUG_ROOT table. Root placement
+-- is gone -- every markdown artifact is a named file at <type>/<name>.md, so
+-- there is no root/pinned distinction left to encode -- but the membership
+-- guard is load-bearing on its own: slugifying destroys a real path, so
+-- types whose filename is a caller-chosen path (spec/index.md, a nested
+-- note, a trace) belong to the path flow instead. See `path_artifact_plan`.
+M.SLUG_TYPES = {
   task = true,
   note = true,
-  todo = false,
-}
-
--- Type-intrinsic root placement policy for the types that share the
--- path-prompt creation flow (spec/trace). Mirrors the canonical cue-plugins
--- ROOT_DEFAULT_TYPES set (root only for spec/note/doc/plan). Unlisted types
--- default to pinned. Drives `path_artifact_plan`.
---   spec  -> root (stable anchor document)
---   trace -> NOT root (point-in-time diagnostics)
-M.PATH_ROOT = {
-  spec  = true,
-  trace = false,
 }
 
 -- Artifact types listed by the context artifact picker, in display order

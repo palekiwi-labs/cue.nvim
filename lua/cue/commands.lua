@@ -3,11 +3,11 @@ local M = {}
 
 --- Generic arg parser shared by :CuePick and :CueAdd.
 --- Tokens are whitespace-separated. Three shapes:
----   "todo"         -> positional
----   "root" / "all" -> flag (must be in KNOWN_FLAGS)
----   "task=master"  -> kwargs (value is everything after first =)
+---   "note"          -> positional
+---   "force" / "all" -> flag (must be in KNOWN_FLAGS)
+---   "task=master"   -> kwargs (value is everything after first =)
 --- No quote handling; values with spaces will break. Acceptable for prototype.
-local KNOWN_FLAGS = { root = true, force = true, all = true }
+local KNOWN_FLAGS = { force = true, all = true }
 
 local function parse_args(args)
   local out = { positional = {}, flags = {}, kwargs = {} }
@@ -39,7 +39,6 @@ local function build_add_opts(category, parsed)
   end
   return {
     category    = category == "spec" and nil or category,
-    root        = parsed.flags.root and true or nil,
     force       = parsed.flags.force and true or nil,
     task        = parsed.kwargs.task,
     frontmatter = frontmatter,
@@ -50,34 +49,16 @@ function M.setup()
   local core   = require('cue.core')
   local picker = require('cue.picker')
 
-  local function prompt_root_and_add(filename, opts)
-    local Snacks = require('snacks')
-    local root_items = {
-      { label = "No",  root = false, desc = "Save as pinned artifact (timestamped, default)" },
-      { label = "Yes", root = true,  desc = "Save at task context root" },
-    }
-    Snacks.picker.select(root_items, {
-      prompt = "Save at context root?",
-      format_item = function(item)
-        return string.format("%-3s  %s", item.label, item.desc)
-      end,
-    }, function(choice)
-      if choice then
-        opts.root = choice.root
-        core.add(filename, opts)
-      end
-    end)
-  end
-
   local function select_category(callback)
     local Snacks = require('snacks')
+    -- The seven types in the model. `todo` and `doc` are gone: a checklist
+    -- is a plan and a single deferred obligation is a task, while synthesised
+    -- knowledge is a note and anything about a revision is a trace.
     local items = {
       { label = "task",  desc = "Task artifact" },
-      { label = "todo",  desc = "TODO artifact" },
       { label = "note",  desc = "Note" },
       { label = "spec",  desc = "Specification" },
       { label = "plan",  desc = "Plan artifact" },
-      { label = "doc",   desc = "Documentation artifact" },
       { label = "trace", desc = "Trace / debug artifact" },
       { label = "bin",   desc = "Binary artifact" },
       { label = "tmp",   desc = "Temporary artifact" },
@@ -108,7 +89,7 @@ function M.setup()
 
   local function run_wizard()
     select_category(function(category)
-      -- task/note/todo share the slug-prompt flow with wizard kind/parent prompts.
+      -- task/note share the slug-prompt flow with a wizard parent prompt.
       if category == "task" then
         core.prompt_task_kind(function(kind)
           core.prompt_parent(function(parent)
@@ -119,7 +100,7 @@ function M.setup()
           end)
         end)
         return
-      elseif category == "note" or category == "todo" then
+      elseif category == "note" then
         core.prompt_parent(function(parent)
           local fm = {}
           if parent then fm.parent = parent end
@@ -134,7 +115,7 @@ function M.setup()
           core.prompt_parent(function(parent)
             local fm = {}
             if parent then fm.parent = parent end
-            prompt_root_and_add(filename, {
+            core.add(filename, {
               category    = category == "spec" and nil or category,
               task        = task,
               frontmatter = fm,
@@ -148,9 +129,9 @@ function M.setup()
   -- :CuePick [type] [key=value ...] [all]
   -- Examples:
   --   :CuePick
-  --   :CuePick todo
-  --   :CuePick todo task=master
-  --   :CuePick todo all
+  --   :CuePick note
+  --   :CuePick note task=master
+  --   :CuePick note all
   vim.api.nvim_create_user_command('CuePick', function(args)
     local parsed = parse_args(args.args)
     local opts = {}
@@ -160,13 +141,13 @@ function M.setup()
     picker.pick_artifacts(opts)
   end, {
     nargs = "*",
-    desc  = "Open cue artifact picker (e.g. :CuePick todo task=master all)",
+    desc  = "Open cue artifact picker (e.g. :CuePick note task=master all)",
   })
 
-  -- :CueAdd [type] [filename] [key=value ...] [root] [force]
-  -- No args           -> full wizard (type, filename, root status prompts)
-  -- Type only         -> prompt filename, no root prompt (pinned by default)
-  -- Type + filename   -> no prompts unless root flag forces root placement
+  -- :CueAdd [type] [filename] [key=value ...] [force]
+  -- No args           -> full wizard (type and filename prompts)
+  -- Type only         -> prompt filename
+  -- Type + filename   -> no prompts
   -- Extra key=value   -> task becomes an opt, rest become frontmatter
   vim.api.nvim_create_user_command('CueAdd', function(args)
     local parsed = parse_args(args.args)
@@ -182,7 +163,7 @@ function M.setup()
     end
   end, {
     nargs = "*",
-    desc  = "Add a cue artifact (no args = wizard; e.g. :CueAdd todo weekly.md root task=master)",
+    desc  = "Add a cue artifact (no args = wizard; e.g. :CueAdd note weekly.md task=master)",
   })
 
   -- :CueLog [task]
