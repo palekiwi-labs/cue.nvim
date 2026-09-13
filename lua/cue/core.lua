@@ -172,10 +172,27 @@ function M.artifact_display_title(artifact)
   return artifact.name or ""
 end
 
---- Comparator for the context artifact picker: group order first
---- (config.CONTEXT_ARTIFACT_TYPES), then the displayed title alphabetically
---- within the group. Title comparison is case-insensitive so "beta" sorts
---- between "Alpha" and "Gamma".
+local function artifact_frontmatter(artifact)
+  local fm = artifact.frontmatter
+  return type(fm) == "table" and fm ~= vim.NIL and fm or {}
+end
+
+--- Finished artifacts remain visible, dimmed and below unfinished siblings.
+function M.artifact_finished(artifact)
+  local status = artifact_frontmatter(artifact).status
+  return status == "complete" or status == "closed"
+end
+
+local function artifact_created_at(artifact)
+  local value = artifact_frontmatter(artifact).created_at
+  if type(value) ~= "number" or value ~= value or value == math.huge or value < 0 then
+    return -1
+  end
+  return value
+end
+
+--- Comparator: type group, unfinished before finished, newest created_at
+--- first (undated last), then case-insensitive title for deterministic ties.
 ---
 --- Ties fall through to the filename and then to the full path. The filename
 --- alone is NOT unique -- artifacts nest, so `spec/alpha/index.md` and
@@ -191,6 +208,11 @@ function M.context_artifact_less(a, b)
   if a_rank ~= b_rank then
     return a_rank < b_rank
   end
+
+  local a_finished, b_finished = M.artifact_finished(a), M.artifact_finished(b)
+  if a_finished ~= b_finished then return not a_finished end
+  local a_created, b_created = artifact_created_at(a), artifact_created_at(b)
+  if a_created ~= b_created then return a_created > b_created end
 
   local a_title = M.artifact_display_title(a):lower()
   local b_title = M.artifact_display_title(b):lower()
@@ -246,6 +268,21 @@ function M.context_display_title(ctx)
     return title
   end
   return ctx.context or ""
+end
+
+--- Format last log activity (Unix seconds), not context modification time.
+--- `now` is explicit so formatting is deterministic and independently testable.
+function M.context_activity(timestamp, now)
+  if type(timestamp) ~= "number" or timestamp ~= timestamp
+     or timestamp == math.huge or timestamp < 0 then
+    return "—"
+  end
+  local age = math.max(0, now - timestamp)
+  if age < 60 then return "now" end
+  if age < 3600 then return math.floor(age / 60) .. "m" end
+  if age < 86400 then return math.floor(age / 3600) .. "h" end
+  if age < 31536000 then return math.floor(age / 86400) .. "d" end
+  return math.floor(age / 31536000) .. "y"
 end
 
 --- Turn a decoded `cue context list --json` payload into the browser's rows
@@ -595,7 +632,7 @@ end
 ---
 --- Called with no opts this still yields the bare `cue context list`, whose
 --- plain slug-per-line output list_contexts and confirm_scope parse.
----@param opts table|nil  supports: json (bool), scope ("repo"|"store"),
+---@param opts table|nil  supports: json (bool), pinned (bool), scope ("repo"|"store"),
 ---  sort ("recency"), limit (positive integer), dir (string, -C),
 ---  store (string, --store)
 ---@return string[]
@@ -603,6 +640,9 @@ function M.list_contexts_argv(opts)
   local cmd = { 'cue', 'context', 'list' }
   if opts and opts.json then
     table.insert(cmd, '--json')
+  end
+  if opts and opts.pinned == true then
+    table.insert(cmd, '--pinned')
   end
   if opts and (opts.scope == "repo" or opts.scope == "store") then
     table.insert(cmd, '--scope')

@@ -75,9 +75,10 @@ local function make_context_artifact_entry_maker(opts)
   }
 
   local make_display = function(entry)
+    local dim = core.artifact_finished(entry.value) and "CueStatusComplete" or nil
     return displayer {
-      { format_category(entry.category), get_category_highlight(entry.category) },
-      { entry.title, "TelescopeResultsNormal" },
+      { format_category(entry.category), dim or get_category_highlight(entry.category) },
+      { entry.title, dim or "TelescopeResultsNormal" },
     }
   end
 
@@ -103,8 +104,8 @@ local function make_context_artifact_entry_maker(opts)
 end
 
 --- Browse ONE context's artifacts as a single searchable list, grouped by
---- type (task, spec, plan, note, trace) and sorted alphabetically by
---- displayed title within each group (cue-nvim-workflow spec §8).
+--- type (task, spec, plan, note, trace). Within each group, unfinished comes
+--- first, complete/closed last; each section is newest-created first.
 ---
 --- Browsing is not activation: the context must be passed explicitly, the
 --- picker never falls back to the active context, and Enter opens the
@@ -194,6 +195,163 @@ function M.pick_active_context_artifacts(opts)
     return
   end
   return M.pick_context_artifacts(ctx, opts)
+end
+
+--- Browse all or pinned contexts, preserving cue's recency order.
+--- Pin state is a query predicate, not a row field: A-s pins in the full
+--- view and unpins in the pinned view. Foreign scopes may be opened/pinned,
+--- but artifact browsing and branch activation require the current repo.
+function M.pick_contexts(opts)
+  opts = opts or {}
+  local query = {
+    json = true, pinned = opts.pinned, scope = opts.scope,
+    sort = opts.sort or "recency", limit = opts.limit,
+    dir = opts.dir, store = opts.store,
+  }
+  local function fetch()
+    local output, err = core.execute_command(core.list_contexts_argv(query))
+    if not output or output == "" then
+      vim.notify("Error fetching cue contexts: " .. (err or "no output"), vim.log.levels.ERROR)
+      return nil
+    end
+    local decoded, parse_err = core.parse_json(output)
+    if type(decoded) ~= "table" then
+      vim.notify("Error parsing cue contexts: " .. (parse_err or "unexpected payload"), vim.log.levels.ERROR)
+      return nil
+    end
+    return core.context_list_view(decoded)
+  end
+  local rows = fetch()
+  if not rows then return end
+  if #rows == 0 then
+    vim.notify("No cue contexts" .. (opts.pinned == true and " pinned" or ""), vim.log.levels.INFO)
+    return
+  end
+
+  local _, status = core.get_active_context(opts)
+  local function address(row)
+    if type(row.scope) ~= "string" or row.scope == "" then return nil end
+    return row.scope .. "/" .. row.context
+  end
+  local function finder(items)
+    local now = os.time()
+    local displayer = entry_display.create {
+      separator = " ",
+      items = {
+        { width = 1 },          -- active marker
+        { width = 8 },          -- mode
+        { width = 70 },         -- title: legacy task-picker width
+        { width = 6, right_justify = true }, -- activity
+        { width = 9 },          -- kind
+        { remaining = true },  -- slug (canonical address at store breadth)
+      },
+    }
+    local kind_highlights = {
+      work = "CueKindWork", coord = "CueKindCoord", reference = "CueKindReference",
+    }
+    local mode_highlights = {
+      research = "CueModeResearch", design = "CueModeDesign", build = "CueModeBuild",
+      review = "CueModeReview", learn = "CueModeLearn",
+    }
+    local function text(value)
+      return type(value) == "string" and value:match("%S") and value or "—"
+    end
+    return finders.new_table({
+      results = items,
+      entry_maker = function(row)
+        local identity = address(row)
+        local title = core.context_display_title(row)
+        local active = status and status.scope == row.scope and status.context == row.context
+        local label = opts.scope == "store" and (identity or row.context) or row.context
+        local mode, kind = text(row.mode), text(row.kind)
+        return make_entry.set_default_entry_mt({
+          value = row, path = row.path,
+          ordinal = (identity or row.context) .. " " .. title .. " " .. mode .. " " .. kind,
+          display = function()
+            return displayer {
+              { active and "*" or " ", "CueMarkerActive" },
+              { mode:upper(), mode_highlights[mode] or "TelescopeResultsComment" },
+              { title, "TelescopeResultsNormal" },
+              { core.context_activity(row.last_logged_at, now), "TelescopeResultsComment" },
+              { kind, kind_highlights[kind] or "TelescopeResultsNormal" },
+              { label, "TelescopeResultsComment" },
+            }
+          end,
+        }, opts)
+      end,
+    })
+  end
+  pickers.new({}, {
+    prompt_title = opts.pinned == true and "Cue Pinned Contexts" or "Cue Contexts",
+    layout_strategy = "vertical",
+    layout_config = { mirror = true, prompt_position = "top", preview_height = 0.5 },
+    finder = finder(rows),
+    sorter = conf.generic_sorter({}),
+    previewer = conf.file_previewer({}),
+    tiebreak = function() return false end,
+    attach_mappings = function(prompt_bufnr, map)
+      local function local_selection()
+        local entry = action_state.get_selected_entry()
+        if not entry then return nil end
+        if not status or type(status.scope) ~= "string" or status.scope ~= entry.value.scope then
+          vim.notify("Cue: browsing artifacts and activation require the current repository scope",
+            vim.log.levels.WARN)
+          return nil
+        end
+        return entry.value
+      end
+      actions.select_default:replace(function()
+        local entry = action_state.get_selected_entry()
+        if not entry or not entry.path then return end
+        actions.close(prompt_bufnr)
+        vim.cmd.edit(vim.fn.fnameescape(entry.path))
+      end)
+      local function browse()
+        local row = local_selection()
+        if not row then return end
+        actions.close(prompt_bufnr)
+        M.pick_context_artifacts(row.context, opts)
+      end
+      local function activate()
+        local row = local_selection()
+        if not row then return end
+        actions.close(prompt_bufnr)
+        core.switch_context(row.context, opts)
+      end
+      local function pin()
+        local entry = action_state.get_selected_entry()
+        if not entry then return end
+        local identity = address(entry.value)
+        if not identity then
+          vim.notify("Cue: context row has no scope for pinning", vim.log.levels.ERROR)
+          return
+        end
+        local operation = opts.pinned == true and "unpin" or "pin"
+        local cmd = { 'cue', 'context', operation, identity }
+        if opts.dir then
+          table.insert(cmd, '-C'); table.insert(cmd, opts.dir)
+        end
+        if opts.store then
+          table.insert(cmd, '--store'); table.insert(cmd, opts.store)
+        end
+        local output, err = core.execute_command(cmd)
+        if not output then
+          vim.notify("Cue context " .. operation .. " failed: " .. (err or "unknown error"), vim.log.levels.ERROR)
+          return
+        end
+        local updated = fetch()
+        if updated then
+          action_state.get_current_picker(prompt_bufnr):refresh(finder(updated), { reset_prompt = false })
+        end
+      end
+      for _, mode in ipairs({ 'i', 'n' }) do
+        map(mode, '<C-e>', browse)
+        map(mode, '<C-s>', activate)
+        map(mode, '<A-s>', pin)
+      end
+      return true
+    end,
+  }):find()
 end
 
 return M

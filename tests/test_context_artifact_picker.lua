@@ -307,6 +307,18 @@ local function last_notify()
 	return state.notifies[#state.notifies]
 end
 
+check("complete and closed artifacts have grey badges and titles", function()
+	for _, status in ipairs({ "complete", "closed" }) do
+		local item = artifact("plan", "finished.md", "Finished")
+		item.frontmatter.status = status
+		open_picker("demo", nil, { decoded = { item } })
+		local entry = state.picker_opts.finder.entry_maker(item)
+		local cells = entry:display()
+		assert(cells[1][2] == "CueStatusComplete")
+		assert(cells[2][2] == "CueStatusComplete")
+	end
+end)
+
 -- Run attach_mappings and return the map() bindings it registered.
 local function attach()
 	local mappings = state.picker_opts.attach_mappings
@@ -381,7 +393,7 @@ check("includes tasks whatever their status", function()
 	payload[1].frontmatter = { title = "Closed task", status = "closed" }
 	payload[2].frontmatter = { title = "Inbox task", status = "inbox" }
 	open_picker("demo", nil, { decoded = payload })
-	assert_order({ "Closed task", "Inbox task" })
+	assert_order({ "Inbox task", "Closed task" })
 end)
 
 check("preserves the grouped order for the empty query", function()

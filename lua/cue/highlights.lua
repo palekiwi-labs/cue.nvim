@@ -38,7 +38,18 @@ function M.setup()
   vim.api.nvim_set_hl(0, "CueCategoryBin", { fg = COLORS.red, bold = false })
   vim.api.nvim_set_hl(0, "CueCategoryTmp", { fg = COLORS.grey, bold = false })
 
-  -- Task kind badge highlights
+  -- Context kinds. Keep the legacy groups below until their separate cleanup.
+  -- Session modes retain the corresponding legacy task-kind palette.
+  vim.api.nvim_set_hl(0, "CueModeResearch", { fg = COLORS.blue, bold = false })
+  vim.api.nvim_set_hl(0, "CueModeDesign", { fg = COLORS.pink, bold = false })
+  vim.api.nvim_set_hl(0, "CueModeBuild", { fg = COLORS.green, bold = false })
+  vim.api.nvim_set_hl(0, "CueModeReview", { fg = COLORS.orange, bold = false })
+  vim.api.nvim_set_hl(0, "CueModeLearn", { fg = COLORS.cyan, bold = false })
+
+  vim.api.nvim_set_hl(0, "CueKindWork", { fg = COLORS.green, bold = false })
+  vim.api.nvim_set_hl(0, "CueKindReference", { fg = COLORS.blue, bold = false })
+
+  -- Legacy task kind badge highlights (Coord also serves context rows).
   vim.api.nvim_set_hl(0, "CueKindResearch", { fg = COLORS.blue, bold = false })
   vim.api.nvim_set_hl(0, "CueKindDesign", { fg = COLORS.pink, bold = false })
   vim.api.nvim_set_hl(0, "CueKindBuild", { fg = COLORS.green, bold = false })

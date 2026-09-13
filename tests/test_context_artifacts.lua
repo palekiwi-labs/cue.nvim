@@ -324,7 +324,7 @@ check("view includes tasks regardless of status", function()
 	complete.frontmatter = { title = "Complete task", status = "complete" }
 
 	local view = core.context_artifacts_view({ closed, complete, inbox })
-	assert_order(view, { "Closed task", "Complete task", "Inbox task" })
+	assert_order(view, { "Inbox task", "Closed task", "Complete task" })
 end)
 
 check("view drops the deferred bin/tmp types", function()

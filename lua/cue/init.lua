@@ -78,6 +78,11 @@ end
 
 -- ─── Re-export picker functions ───────────────────────────────────────────────
 
+--- Browse contexts; pinned=true selects the working set, scope="store" widens it.
+function M.pick_contexts(opts)
+  return require('cue.picker').pick_contexts(opts)
+end
+
 --- Browse the active context's artifacts (task/spec/plan/note/trace) (<C-s>).
 --- Resolves active context via `cue status --json`.
 ---@param opts table|nil  supports: dir (`cue -C`), store (`cue --store`)
