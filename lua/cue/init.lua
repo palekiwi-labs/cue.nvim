@@ -104,10 +104,27 @@ function M.pick_done_tasks()
   return require('cue.picker').pick_done_tasks()
 end
 
---- Open Telescope artifact picker scoped to the active task's context.
---- Notifies when the global (master) context is active (no task scope).
-function M.pick_active_task_artifacts()
-  return require('cue.picker').pick_active_task_artifacts()
+--- Browse the active context's artifacts (task/spec/plan/note/trace) (<C-s>).
+--- Resolves active context via `cue status --json`.
+---@param opts table|nil  supports: dir (`cue -C`), store (`cue --store`)
+function M.pick_active_context_artifacts(opts)
+  return require('cue.picker').pick_active_context_artifacts(opts)
+end
+
+--- Legacy alias for pick_active_context_artifacts (<C-s>).
+--- Replaces the legacy task-scoped picker which relied on obsolete --task flags.
+---@param opts table|nil  supports: dir (`cue -C`), store (`cue --store`)
+function M.pick_active_task_artifacts(opts)
+  return require('cue.picker').pick_active_context_artifacts(opts)
+end
+
+--- Browse one context's artifacts (task/spec/plan/note/trace) as a single
+--- searchable, type-grouped list. The context is explicit: there is no
+--- fallback to the active context, and Enter opens without activating.
+---@param context string  context slug (required)
+---@param opts table|nil  supports: dir (`cue -C`), store (`cue --store`)
+function M.pick_context_artifacts(context, opts)
+  return require('cue.picker').pick_context_artifacts(context, opts)
 end
 
 --- Open Telescope context file picker

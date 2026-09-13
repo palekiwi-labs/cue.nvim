@@ -49,6 +49,20 @@ M.PATH_ROOT = {
   trace = false,
 }
 
+-- Artifact types listed by the context artifact picker, in display order
+-- (cue-nvim-workflow spec §8): tasks, specs, plans, notes, traces. The list
+-- is both the CLI type filter (one `--type` flag per entry) and the group
+-- ordering. `bin` and `tmp` are DEFERRED, not permanently excluded -- adding
+-- them here is the only change their inclusion needs.
+M.CONTEXT_ARTIFACT_TYPES = { "task", "spec", "plan", "note", "trace" }
+
+-- Group rank derived from CONTEXT_ARTIFACT_TYPES. Doubles as the membership
+-- test for the picker: a type absent from this table is not listed.
+M.CONTEXT_ARTIFACT_TYPE_RANK = {}
+for i, cue_type in ipairs(M.CONTEXT_ARTIFACT_TYPES) do
+  M.CONTEXT_ARTIFACT_TYPE_RANK[cue_type] = i
+end
+
 M.category_highlights = {
   spec  = "CueCategorySpec",
   plan  = "CueCategoryPlan",

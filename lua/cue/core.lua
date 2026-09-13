@@ -191,6 +191,185 @@ function M.type_excluded(category, opts)
   return exclude ~= nil and category == exclude
 end
 
+-- ─── Context artifact browsing ────────────────────────────────────────────────
+-- Pure helpers behind picker.pick_context_artifacts (cue-nvim-workflow spec
+-- §8). Kept free of vim.* calls (beyond the NIL sentinel comparison) so they
+-- are unit-testable without Neovim; see tests/test_context_artifacts.lua.
+
+--- Normalise an explicitly supplied context slug.
+---
+--- Browsing a context is an EXPLICIT operation: there is deliberately no
+--- fallback to the active context (`cue status` / `.cue/HEAD`). Consulting
+--- another context must not depend on, or silently follow, the active one.
+--- A nil/blank/non-string argument is a caller error, reported as nil.
+---@param context string|nil
+---@return string|nil  trimmed slug, or nil when no explicit context was given
+function M.normalize_context(context)
+  if type(context) ~= "string" then
+    return nil
+  end
+  local trimmed = context:gsub("^%s+", ""):gsub("%s+$", "")
+  if trimmed == "" then
+    return nil
+  end
+  return trimmed
+end
+
+--- Build the `cue status --json` argv.
+--- Optional repo dir (-C) and store root (--store) are supported.
+---@param opts table|nil  supports: dir (string, -C), store (string, --store)
+---@return table  argv list
+function M.active_context_argv(opts)
+  opts = opts or {}
+  local cmd = { 'cue', 'status' }
+  if type(opts.dir) == "string" and opts.dir ~= "" then
+    table.insert(cmd, '-C')
+    table.insert(cmd, opts.dir)
+  end
+  if type(opts.store) == "string" and opts.store ~= "" then
+    table.insert(cmd, '--store')
+    table.insert(cmd, opts.store)
+  end
+  table.insert(cmd, '--json')
+  return cmd
+end
+
+--- Pure decision helper for resolving active context from a status table.
+--- Kept free of side effects so it can be unit-tested without Neovim.
+---@param status table|nil  decoded `cue status --json` output
+---@return table  { action = "pick", context = string } or { action = "notify", message = string }
+function M.active_context_decision(status)
+  if not status or type(status) ~= "table" then
+    return { action = "notify", message = "No active cue context" }
+  end
+  local ctx = status.context
+  if ctx == nil or ctx == vim.NIL or type(ctx) ~= "string" or ctx:match("^%s*$") then
+    return { action = "notify", message = "No active cue context" }
+  end
+  local trimmed = ctx:gsub("^%s+", ""):gsub("%s+$", "")
+  return { action = "pick", context = trimmed }
+end
+
+--- Build the `cue list` argv for ONE explicit context.
+---
+--- Emits the current CLI surface only: `--context` for the scope, `-C` for an
+--- alternate repository directory and `--store` for an alternate store root
+--- (both optional), plus one `--type` flag per approved group. Requesting the
+--- types explicitly keeps the deferred `bin`/`tmp` artifacts out of the
+--- payload rather than filtering them after the fact.
+---
+--- Returns nil when no explicit context was supplied: without `--context`,
+--- `cue list` resolves the ACTIVE context, which this picker must never do.
+---@param context string|nil  context slug (required)
+---@param opts table|nil  supports: dir (string, -C), store (string, --store)
+---@return table|nil  argv list, or nil when the context is missing
+function M.context_artifacts_argv(context, opts)
+  local ctx = M.normalize_context(context)
+  if not ctx then
+    return nil
+  end
+  opts = opts or {}
+
+  local cmd = { 'cue', 'list' }
+  if type(opts.dir) == "string" and opts.dir ~= "" then
+    table.insert(cmd, '-C')
+    table.insert(cmd, opts.dir)
+  end
+  if type(opts.store) == "string" and opts.store ~= "" then
+    table.insert(cmd, '--store')
+    table.insert(cmd, opts.store)
+  end
+  table.insert(cmd, '--context')
+  table.insert(cmd, ctx)
+  table.insert(cmd, '--json')
+  table.insert(cmd, '--frontmatter')
+  for _, cue_type in ipairs(config.CONTEXT_ARTIFACT_TYPES) do
+    table.insert(cmd, '--type')
+    table.insert(cmd, cue_type)
+  end
+  return cmd
+end
+
+--- Displayed title for an artifact row: the frontmatter title, falling back
+--- to the filename when there is none.
+---
+--- Only a nonblank STRING title is accepted: YAML emits an unquoted numeric
+--- title as a number, which cannot be rendered as a display column.
+---@param artifact table|nil  a `cue list --json --frontmatter` row
+---@return string
+function M.artifact_display_title(artifact)
+  if not artifact or artifact == vim.NIL or type(artifact) ~= "table" then
+    return ""
+  end
+  local fm = artifact.frontmatter
+  if fm and fm ~= vim.NIL and type(fm) == "table" then
+    local title = fm.title
+    if type(title) == "string" and title:match("%S") then
+      return title
+    end
+  end
+  return artifact.name or ""
+end
+
+--- Comparator for the context artifact picker: group order first
+--- (config.CONTEXT_ARTIFACT_TYPES), then the displayed title alphabetically
+--- within the group. Title comparison is case-insensitive so "beta" sorts
+--- between "Alpha" and "Gamma".
+---
+--- Ties fall through to the filename and then to the full path. The filename
+--- alone is NOT unique -- artifacts nest, so `spec/alpha/index.md` and
+--- `spec/beta/index.md` share a basename -- and table.sort is not stable, so
+--- the path is needed as the final discriminator to keep the order
+--- deterministic and independent of input order.
+---@param a table
+---@param b table
+---@return boolean
+function M.context_artifact_less(a, b)
+  local a_rank = config.CONTEXT_ARTIFACT_TYPE_RANK[a.type] or 99
+  local b_rank = config.CONTEXT_ARTIFACT_TYPE_RANK[b.type] or 99
+  if a_rank ~= b_rank then
+    return a_rank < b_rank
+  end
+
+  local a_title = M.artifact_display_title(a):lower()
+  local b_title = M.artifact_display_title(b):lower()
+  if a_title ~= b_title then
+    return a_title < b_title
+  end
+
+  local a_name = a.name or ""
+  local b_name = b.name or ""
+  if a_name ~= b_name then
+    return a_name < b_name
+  end
+
+  return (a.path or "") < (b.path or "")
+end
+
+--- Turn a `cue list` payload into the picker's row list: keep the approved
+--- artifact types (dropping the deferred bin/tmp and any unknown type), then
+--- order them with context_artifact_less.
+---
+--- Tasks are kept whatever their status: the spec requires them in this list,
+--- so no status filtering happens here.
+---@param artifacts table|nil  decoded `cue list --json --frontmatter` output
+---@return table  ordered rows (never nil)
+function M.context_artifacts_view(artifacts)
+  local rows = {}
+  if type(artifacts) ~= "table" then
+    return rows
+  end
+  for _, artifact in ipairs(artifacts) do
+    if type(artifact) == "table"
+       and type(artifact.path) == "string"
+       and config.CONTEXT_ARTIFACT_TYPE_RANK[artifact.type] then
+      rows[#rows + 1] = artifact
+    end
+  end
+  table.sort(rows, M.context_artifact_less)
+  return rows
+end
+
 -- Numeric sort rank for a marker: "*" (0) < "!" (1) < " " (2).
 local function marker_rank(marker)
   if marker == "*" then return 0 end
@@ -486,6 +665,38 @@ function M.get_current_branch()
   local branch = (obj.stdout or ""):gsub("%s+", "")
   if branch == "" then return nil end
   return branch:gsub("/", "-")
+end
+
+--- Query cue status for the active context slug.
+---
+--- Emits `cue status --json` with optional `-C dir` and `--store store`.
+--- In the central store model, cue status returns:
+---   `{ context = "<slug>", ... }` when a context is active, or
+---   `{ context = nil, ... }` when no context is active (unset).
+---
+--- Unlike the legacy model, there is no default or fallback context ("master"
+--- is not a fallback). If context is unset, returns nil.
+---
+---@param opts table|nil  supports: dir (string, -C), store (string, --store)
+---@return string|nil context_slug, table|nil full_status, string|nil error_message
+function M.get_active_context(opts)
+  local cmd = M.active_context_argv(opts)
+  local output, err = M.execute_command(cmd)
+  if not output or output == "" then
+    return nil, nil, err or "no output from cue status"
+  end
+
+  local ok, status = pcall(vim.json.decode, output)
+  if not ok or type(status) ~= "table" then
+    return nil, nil, "invalid JSON from cue status"
+  end
+
+  local decision = M.active_context_decision(status)
+  if decision.action == "notify" then
+    return nil, status, nil
+  end
+
+  return decision.context, status, nil
 end
 
 --- Get the active task context (resolved from `.cue/HEAD` via `cue status`).
