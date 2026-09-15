@@ -8,18 +8,19 @@
 --     NEVER fall back to the active context when none is given.
 --
 --   core.context_artifacts_argv(context, opts)
---     `cue list --context <ctx> --json --frontmatter --type ...` argv, with
---     one --type flag per listed group (task/spec/plan/note/trace, then the
---     non-markdown bin/tmp, in that order). Optional repo dir (-C) and store
---     root (--store) are supported.
+--     `cue list --context <ctx> --json --frontmatter` argv. No --type
+--     filter: cue owns the artifact universe and the picker renders every
+--     type the CLI reports. Optional repo dir (-C) and store root
+--     (--store) are supported.
 --
 --   core.artifact_display_title(artifact)
 --     frontmatter.title when it is a nonempty string, else the filename.
 --
 --   core.context_artifacts_view(artifacts)
---     Filter to the seven listed types, then order by group
---     (task, spec, plan, note, trace, bin, tmp) and alphabetically by
---     displayed title within a group.
+--     Keep every well-formed row of ANY type (a future cue type renders
+--     in the trailing group), then order by group (task, spec, plan,
+--     note, trace, review, bin, tmp) and alphabetically by displayed
+--     title within a group.
 --
 -- Mocks the minimal `vim` global so the real module can be required without
 -- a running Neovim instance.
@@ -113,7 +114,7 @@ end)
 
 -- ─── context_artifacts_argv ───────────────────────────────────────────
 
-check("argv requests exactly the seven listed types, in display order", function()
+check("argv sends no type filter: cue owns the artifact universe", function()
 	assert_argv(core.context_artifacts_argv("demo"), {
 		"cue",
 		"list",
@@ -121,29 +122,17 @@ check("argv requests exactly the seven listed types, in display order", function
 		"demo",
 		"--json",
 		"--frontmatter",
-		"--type",
-		"task",
-		"--type",
-		"spec",
-		"--type",
-		"plan",
-		"--type",
-		"note",
-		"--type",
-		"trace",
-		"--type",
-		"bin",
-		"--type",
-		"tmp",
 	})
 end)
 
-check("argv appends bin and tmp after the markdown groups", function()
-	-- The markdown groups keep their spec order; the non-markdown types are
-	-- appended rather than interleaved, so the existing rows do not move.
-	local argv = core.context_artifacts_argv("demo")
-	assert(argv[#argv - 2] == "bin", "bin is the second-to-last type")
-	assert(argv[#argv] == "tmp", "tmp is the last type")
+check("argv carries no --type flags", function()
+	-- A type list would restate cue's vocabulary in the client (the plugin
+	-- would need an edit every time cue gains a type) and version-couple
+	-- the two: a binary that does not know a requested type rejects the
+	-- whole query, so every picker open would fail against an older pin.
+	for _, arg in ipairs(core.context_artifacts_argv("demo")) do
+		assert(arg ~= "--type", "argv must not filter by type")
+	end
 end)
 
 check("argv uses current CLI flags only", function()
@@ -168,20 +157,6 @@ check("argv carries an explicit repo dir and store root", function()
 		"demo",
 		"--json",
 		"--frontmatter",
-		"--type",
-		"task",
-		"--type",
-		"spec",
-		"--type",
-		"plan",
-		"--type",
-		"note",
-		"--type",
-		"trace",
-		"--type",
-		"bin",
-		"--type",
-		"tmp",
 	})
 end)
 
@@ -234,10 +209,13 @@ end)
 
 -- ─── context_artifacts_view: grouping and ordering ────────────────────
 
-check("view groups by type: task, spec, plan, note, trace, bin, tmp", function()
+check("view groups by type: task, spec, plan, note, trace, review, bin, tmp", function()
 	local view = core.context_artifacts_view({
 		artifact("tmp", "scratch.diff"),
 		artifact("bin", "run.sh"),
+		-- review rows carry the whole JSON document as frontmatter and no
+		-- top-level title, so the title falls back to the filename.
+		artifact("review", "readiness.json"),
 		artifact("trace", "t.md", "Trace one"),
 		artifact("note", "n.md", "Note one"),
 		artifact("plan", "p.md", "Plan one"),
@@ -250,6 +228,7 @@ check("view groups by type: task, spec, plan, note, trace, bin, tmp", function()
 		"Plan one",
 		"Note one",
 		"Trace one",
+		"readiness.json",
 		"run.sh",
 		"scratch.diff",
 	})
@@ -368,16 +347,19 @@ check("view orders tmp rows by the stamp parsed from the group directory", funct
 	})
 end)
 
-check("view drops unknown types and malformed rows", function()
+check("view keeps unknown types after the known groups, drops malformed rows", function()
+	-- cue owns the type vocabulary: a row of a type this plugin has never
+	-- heard of (a future cue release) must still render, in the trailing
+	-- order group, rather than be hidden behind a plugin release. Only a
+	-- malformed row (no path to open) is dropped.
 	local no_path = artifact("note", "n.md", "No path")
 	no_path.path = nil
 	local view = core.context_artifacts_view({
-		artifact("doc", "d.md", "Legacy doc"),
-		artifact("todo", "t.md", "Legacy todo"),
+		artifact("sometype", "future.md", "Future thing"),
 		no_path,
 		artifact("spec", "index.md", "Spec one"),
 	})
-	assert_order(view, { "Spec one" })
+	assert_order(view, { "Spec one", "Future thing" })
 end)
 
 check("view is empty-safe", function()

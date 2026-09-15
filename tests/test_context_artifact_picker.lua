@@ -9,7 +9,7 @@
 --   * No implicit scope: a missing context never falls back to the active
 --     context, so no CLI call is made at all.
 --   * One searchable list in group order (task, spec, plan, note, trace,
---     bin, tmp), alphabetical by displayed title inside a group.
+--     bin, tmp, review), alphabetical by displayed title inside a group.
 --   * Rows show type, a priority caret, the title (filename fallback) and
 --     the creation age, every column a fixed width: the title is 72 cells
 --     and the age follows it, so the age stays beside the title instead of
@@ -286,6 +286,10 @@ end
 -- The wire payload `cue list --context demo --json --frontmatter` returns,
 -- in the CLI's own (type-directory alphabetical) order.
 local function fixture()
+	-- A review row: its frontmatter IS the whole JSON document, which
+	-- carries no top-level title, so the display falls back to the name.
+	local review_row = artifact("review", "readiness.json")
+	review_row.frontmatter = { summary = { verified = 5, refuted = 1 } }
 	return {
 		artifact("note", "grouped-artifact-browser.md"),
 		artifact("plan", "zeta-plan.md", "Zeta plan"),
@@ -294,8 +298,10 @@ local function fixture()
 		artifact("task", "context-artifact-picker.md", "Build the context artifact picker"),
 		artifact("task", "archived.md", "Archived task"),
 		artifact("trace", "handoff.md", "Session handoff"),
-		-- bin and tmp arrive WITHOUT a frontmatter key: `cue add` refuses
-		-- metadata for both, so the picker only ever sees path/name/type.
+		review_row,
+		-- bin and tmp arrive WITHOUT a frontmatter key: their content is
+		-- opaque to the list layer, so the picker only ever sees
+		-- path/name/type.
 		artifact("bin", "run.sh"),
 		artifact("tmp", GROUPED_TMP_NAME),
 		artifact("tmp", "legacy.diff"),
@@ -411,7 +417,7 @@ end)
 
 -- ─── ordering and membership ──────────────────────────────────────────
 
-check("lists one searchable list grouped task/spec/plan/note/trace/bin/tmp", function()
+check("lists one searchable list grouped task/spec/plan/note/trace/review/bin/tmp", function()
 	open_picker("demo")
 	assert_order({
 		"Archived task",
@@ -421,18 +427,20 @@ check("lists one searchable list grouped task/spec/plan/note/trace/bin/tmp", fun
 		"Zeta plan",
 		"grouped-artifact-browser.md",
 		"Session handoff",
+		"readiness.json",
 		"run.sh",
 		GROUPED_TMP_NAME,
 		"legacy.diff",
 	})
 end)
 
-check("includes bin and tmp artifacts", function()
+check("includes review artifacts with the document as frontmatter", function()
 	open_picker("demo")
 	local seen = {}
 	for _, a in ipairs(rows()) do
 		seen[a.type] = true
 	end
+	assert(seen.review, "review artifacts must be listed")
 	assert(seen.bin, "bin artifacts must be listed")
 	assert(seen.tmp, "tmp artifacts must be listed")
 end)
@@ -476,6 +484,14 @@ check("rows show artifact type and title, with a filename fallback", function()
 	local fallback_cols = untitled.display(untitled)
 	assert(fallback_cols[1][1] == "NOTE", "expected the NOTE badge")
 	assert(fallback_cols[3][1] == "grouped-artifact-browser.md", "expected the filename fallback")
+
+	-- review badges as REV: "REVIEW" is six cells in the five-cell badge
+	-- column and would truncate.
+	local reviewed = entry_maker(artifact("review", "readiness.json"))
+	local review_cols = reviewed.display(reviewed)
+	assert(review_cols[1][1] == "REV", "expected the REV badge, got " .. tostring(review_cols[1][1]))
+	assert(review_cols[1][2] == "CueCategoryReview", "expected the review colour on the badge")
+	assert(review_cols[3][1] == "readiness.json", "expected the filename fallback for an untitled document")
 end)
 
 check("columns are type, priority caret, title, creation age", function()

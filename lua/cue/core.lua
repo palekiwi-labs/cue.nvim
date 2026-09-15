@@ -1,7 +1,7 @@
 --- Core helpers and artifact management functions
 local M = {}
 
-local config = require('cue.config')
+local config = require("cue.config")
 
 -- ─── Context artifact browsing ────────────────────────────────────────────────
 -- Pure helpers behind picker.pick_context_artifacts (cue-nvim-workflow spec
@@ -17,14 +17,14 @@ local config = require('cue.config')
 ---@param context string|nil
 ---@return string|nil  trimmed slug, or nil when no explicit context was given
 function M.normalize_context(context)
-  if type(context) ~= "string" then
-    return nil
-  end
-  local trimmed = context:gsub("^%s+", ""):gsub("%s+$", "")
-  if trimmed == "" then
-    return nil
-  end
-  return trimmed
+	if type(context) ~= "string" then
+		return nil
+	end
+	local trimmed = context:gsub("^%s+", ""):gsub("%s+$", "")
+	if trimmed == "" then
+		return nil
+	end
+	return trimmed
 end
 
 --- Build the `cue status --json` argv.
@@ -32,18 +32,18 @@ end
 ---@param opts table|nil  supports: dir (string, -C), store (string, --store)
 ---@return table  argv list
 function M.active_context_argv(opts)
-  opts = opts or {}
-  local cmd = { 'cue', 'status' }
-  if type(opts.dir) == "string" and opts.dir ~= "" then
-    table.insert(cmd, '-C')
-    table.insert(cmd, opts.dir)
-  end
-  if type(opts.store) == "string" and opts.store ~= "" then
-    table.insert(cmd, '--store')
-    table.insert(cmd, opts.store)
-  end
-  table.insert(cmd, '--json')
-  return cmd
+	opts = opts or {}
+	local cmd = { "cue", "status" }
+	if type(opts.dir) == "string" and opts.dir ~= "" then
+		table.insert(cmd, "-C")
+		table.insert(cmd, opts.dir)
+	end
+	if type(opts.store) == "string" and opts.store ~= "" then
+		table.insert(cmd, "--store")
+		table.insert(cmd, opts.store)
+	end
+	table.insert(cmd, "--json")
+	return cmd
 end
 
 --- Pure decision helper for resolving active context from a status table.
@@ -51,15 +51,15 @@ end
 ---@param status table|nil  decoded `cue status --json` output
 ---@return table  { action = "pick", context = string } or { action = "notify", message = string }
 function M.active_context_decision(status)
-  if not status or type(status) ~= "table" then
-    return { action = "notify", message = "No active cue context" }
-  end
-  local ctx = status.context
-  if ctx == nil or ctx == vim.NIL or type(ctx) ~= "string" or ctx:match("^%s*$") then
-    return { action = "notify", message = "No active cue context" }
-  end
-  local trimmed = ctx:gsub("^%s+", ""):gsub("%s+$", "")
-  return { action = "pick", context = trimmed }
+	if not status or type(status) ~= "table" then
+		return { action = "notify", message = "No active cue context" }
+	end
+	local ctx = status.context
+	if ctx == nil or ctx == vim.NIL or type(ctx) ~= "string" or ctx:match("^%s*$") then
+		return { action = "notify", message = "No active cue context" }
+	end
+	local trimmed = ctx:gsub("^%s+", ""):gsub("%s+$", "")
+	return { action = "pick", context = trimmed }
 end
 
 --- A decoded JSON field as a trimmed, nonempty string, or nil.
@@ -68,14 +68,14 @@ end
 ---@param value any
 ---@return string|nil
 local function text_field(value)
-  if value == nil or value == vim.NIL or type(value) ~= "string" then
-    return nil
-  end
-  local trimmed = value:gsub("^%s+", ""):gsub("%s+$", "")
-  if trimmed == "" then
-    return nil
-  end
-  return trimmed
+	if value == nil or value == vim.NIL or type(value) ~= "string" then
+		return nil
+	end
+	local trimmed = value:gsub("^%s+", ""):gsub("%s+$", "")
+	if trimmed == "" then
+		return nil
+	end
+	return trimmed
 end
 
 --- Absolute path to the active context's `context.md`, derived from a decoded
@@ -98,17 +98,17 @@ end
 ---@param status table|nil  decoded `cue status --json` output
 ---@return string|nil
 function M.active_context_path(status)
-  if not status or status == vim.NIL or type(status) ~= "table" then
-    return nil
-  end
+	if not status or status == vim.NIL or type(status) ~= "table" then
+		return nil
+	end
 
-  local store = text_field(status.store)
-  local address = text_field(status.address)
-  if not store or not address then
-    return nil
-  end
+	local store = text_field(status.store)
+	local address = text_field(status.address)
+	if not store or not address then
+		return nil
+	end
 
-  return (store:gsub("/+$", "")) .. "/" .. address .. "/context.md"
+	return (store:gsub("/+$", "")) .. "/" .. address .. "/context.md"
 end
 
 --- The repository scope reported by `cue status --json`, e.g.
@@ -128,10 +128,10 @@ end
 ---@param status table|nil  decoded `cue status --json` output
 ---@return string|nil
 function M.status_scope(status)
-  if type(status) ~= "table" or status == vim.NIL then
-    return nil
-  end
-  return text_field(status.scope)
+	if type(status) ~= "table" or status == vim.NIL then
+		return nil
+	end
+	return text_field(status.scope)
 end
 
 --- The canonical address of an artifact: `<scope>/<context>/<type>/<name>`.
@@ -156,32 +156,35 @@ end
 ---                                    when the row carries none
 ---@return string|nil
 function M.artifact_address(scope, artifact, fallback_context)
-  local repo = text_field(scope)
-  if not repo or type(artifact) ~= "table" or artifact == vim.NIL then
-    return nil
-  end
-  repo = repo:gsub("/+$", "")
+	local repo = text_field(scope)
+	if not repo or type(artifact) ~= "table" or artifact == vim.NIL then
+		return nil
+	end
+	repo = repo:gsub("/+$", "")
 
-  local context = text_field(artifact.context) or text_field(fallback_context)
-  local cue_type = text_field(artifact.type)
-  local name = text_field(artifact.name)
-  if repo == "" or not context or not cue_type or not name then
-    return nil
-  end
-  if name:sub(1, 1) == "/" then
-    return nil
-  end
+	local context = text_field(artifact.context) or text_field(fallback_context)
+	local cue_type = text_field(artifact.type)
+	local name = text_field(artifact.name)
+	if repo == "" or not context or not cue_type or not name then
+		return nil
+	end
+	if name:sub(1, 1) == "/" then
+		return nil
+	end
 
-  return table.concat({ repo, context, cue_type, name }, "/")
+	return table.concat({ repo, context, cue_type, name }, "/")
 end
 
 --- Build the `cue list` argv for ONE explicit context.
 ---
 --- Emits the current CLI surface only: `--context` for the scope, `-C` for an
 --- alternate repository directory and `--store` for an alternate store root
---- (both optional), plus one `--type` flag per listed group. Requesting the
---- types explicitly keeps any type the picker does not render out of the
---- payload rather than filtering it after the fact.
+--- (both optional). No `--type` filter is sent: cue owns the artifact
+--- universe and returns every type it recognises, and the picker renders
+--- whatever arrives. Sending an explicit type list would restate cue's
+--- vocabulary in the client -- the plugin would need an edit every time cue
+--- gains a type -- and would version-couple the two, since a binary that
+--- does not know a requested type rejects the whole query.
 ---
 --- Returns nil when no explicit context was supplied: without `--context`,
 --- `cue list` resolves the ACTIVE context, which this picker must never do.
@@ -189,30 +192,26 @@ end
 ---@param opts table|nil  supports: dir (string, -C), store (string, --store)
 ---@return table|nil  argv list, or nil when the context is missing
 function M.context_artifacts_argv(context, opts)
-  local ctx = M.normalize_context(context)
-  if not ctx then
-    return nil
-  end
-  opts = opts or {}
+	local ctx = M.normalize_context(context)
+	if not ctx then
+		return nil
+	end
+	opts = opts or {}
 
-  local cmd = { 'cue', 'list' }
-  if type(opts.dir) == "string" and opts.dir ~= "" then
-    table.insert(cmd, '-C')
-    table.insert(cmd, opts.dir)
-  end
-  if type(opts.store) == "string" and opts.store ~= "" then
-    table.insert(cmd, '--store')
-    table.insert(cmd, opts.store)
-  end
-  table.insert(cmd, '--context')
-  table.insert(cmd, ctx)
-  table.insert(cmd, '--json')
-  table.insert(cmd, '--frontmatter')
-  for _, cue_type in ipairs(config.CONTEXT_ARTIFACT_TYPES) do
-    table.insert(cmd, '--type')
-    table.insert(cmd, cue_type)
-  end
-  return cmd
+	local cmd = { "cue", "list" }
+	if type(opts.dir) == "string" and opts.dir ~= "" then
+		table.insert(cmd, "-C")
+		table.insert(cmd, opts.dir)
+	end
+	if type(opts.store) == "string" and opts.store ~= "" then
+		table.insert(cmd, "--store")
+		table.insert(cmd, opts.store)
+	end
+	table.insert(cmd, "--context")
+	table.insert(cmd, ctx)
+	table.insert(cmd, "--json")
+	table.insert(cmd, "--frontmatter")
+	return cmd
 end
 
 --- Displayed title for an artifact row: the frontmatter title, falling back
@@ -223,28 +222,28 @@ end
 ---@param artifact table|nil  a `cue list --json --frontmatter` row
 ---@return string
 function M.artifact_display_title(artifact)
-  if not artifact or artifact == vim.NIL or type(artifact) ~= "table" then
-    return ""
-  end
-  local fm = artifact.frontmatter
-  if fm and fm ~= vim.NIL and type(fm) == "table" then
-    local title = fm.title
-    if type(title) == "string" and title:match("%S") then
-      return title
-    end
-  end
-  return artifact.name or ""
+	if not artifact or artifact == vim.NIL or type(artifact) ~= "table" then
+		return ""
+	end
+	local fm = artifact.frontmatter
+	if fm and fm ~= vim.NIL and type(fm) == "table" then
+		local title = fm.title
+		if type(title) == "string" and title:match("%S") then
+			return title
+		end
+	end
+	return artifact.name or ""
 end
 
 local function artifact_frontmatter(artifact)
-  local fm = artifact.frontmatter
-  return type(fm) == "table" and fm ~= vim.NIL and fm or {}
+	local fm = artifact.frontmatter
+	return type(fm) == "table" and fm ~= vim.NIL and fm or {}
 end
 
 --- Finished artifacts remain visible, dimmed and below unfinished siblings.
 function M.artifact_finished(artifact)
-  local status = artifact_frontmatter(artifact).status
-  return status == "complete" or status == "closed"
+	local status = artifact_frontmatter(artifact).status
+	return status == "complete" or status == "closed"
 end
 
 --- Unix seconds parsed out of a `tmp` group directory name.
@@ -270,21 +269,21 @@ end
 ---@param name string|nil  the `name` field of a tmp row
 ---@return number|nil  Unix seconds, or nil when the name carries no stamp
 local function tmp_group_created_at(name)
-  if type(name) ~= "string" then
-    return nil
-  end
-  local group = name:match("^([^/]+)/")
-  if not group then
-    return nil
-  end
-  local digits, hash = group:match("^(%d+)%-(%x+)$")
-  if not digits or not hash then
-    return nil
-  end
-  if #digits ~= 19 or digits:sub(1, 1) == "0" then
-    return nil
-  end
-  return tonumber(digits:sub(1, 10))
+	if type(name) ~= "string" then
+		return nil
+	end
+	local group = name:match("^([^/]+)/")
+	if not group then
+		return nil
+	end
+	local digits, hash = group:match("^(%d+)%-(%x+)$")
+	if not digits or not hash then
+		return nil
+	end
+	if #digits ~= 19 or digits:sub(1, 1) == "0" then
+		return nil
+	end
+	return tonumber(digits:sub(1, 10))
 end
 
 --- When an artifact was created, in Unix seconds, or nil when unknown.
@@ -300,17 +299,17 @@ end
 ---@param artifact table|nil  a `cue list --json --frontmatter` row
 ---@return number|nil
 function M.artifact_created_at(artifact)
-  if type(artifact) ~= "table" or artifact == vim.NIL then
-    return nil
-  end
-  local value = artifact_frontmatter(artifact).created_at
-  if type(value) == "number" and value == value and value ~= math.huge and value >= 0 then
-    return value
-  end
-  if artifact.type == "tmp" then
-    return tmp_group_created_at(artifact.name)
-  end
-  return nil
+	if type(artifact) ~= "table" or artifact == vim.NIL then
+		return nil
+	end
+	local value = artifact_frontmatter(artifact).created_at
+	if type(value) == "number" and value == value and value ~= math.huge and value >= 0 then
+		return value
+	end
+	if artifact.type == "tmp" then
+		return tmp_group_created_at(artifact.name)
+	end
+	return nil
 end
 
 --- The creation stamp as a display cell: the compact relative age the
@@ -330,11 +329,15 @@ end
 ---@param now number  Unix seconds, sampled by the caller
 ---@return string
 function M.artifact_created_age(artifact, now)
-  return M.relative_age(M.artifact_created_at(artifact), now)
+	return M.relative_age(M.artifact_created_at(artifact), now)
 end
 
 --- Comparator: type group, unfinished before finished, newest created_at
 --- first (undated last), then case-insensitive title for deterministic ties.
+---
+--- The type rank comes from config.ARTIFACT_TYPE_ORDER, a presentation-only
+--- map: unknown types fall to rank 99, keeping the trailing group after
+--- every known one without hiding anything.
 ---
 --- Ties fall through to the filename and then to the full path. The filename
 --- alone is NOT unique -- artifacts nest, so `spec/alpha/index.md` and
@@ -345,59 +348,66 @@ end
 ---@param b table
 ---@return boolean
 function M.context_artifact_less(a, b)
-  local a_rank = config.CONTEXT_ARTIFACT_TYPE_RANK[a.type] or 99
-  local b_rank = config.CONTEXT_ARTIFACT_TYPE_RANK[b.type] or 99
-  if a_rank ~= b_rank then
-    return a_rank < b_rank
-  end
+	local a_rank = config.ARTIFACT_TYPE_ORDER[a.type] or 99
+	local b_rank = config.ARTIFACT_TYPE_ORDER[b.type] or 99
+	if a_rank ~= b_rank then
+		return a_rank < b_rank
+	end
 
-  local a_finished, b_finished = M.artifact_finished(a), M.artifact_finished(b)
-  if a_finished ~= b_finished then return not a_finished end
-  -- The same stamp the creation column renders, so the column and the
-  -- ordering never disagree. Undated rows sort last (-1 is below every real
-  -- Unix second), which is what puts a flat legacy tmp file under the
-  -- grouped ones.
-  local a_created = M.artifact_created_at(a) or -1
-  local b_created = M.artifact_created_at(b) or -1
-  if a_created ~= b_created then return a_created > b_created end
+	local a_finished, b_finished = M.artifact_finished(a), M.artifact_finished(b)
+	if a_finished ~= b_finished then
+		return not a_finished
+	end
+	-- The same stamp the creation column renders, so the column and the
+	-- ordering never disagree. Undated rows sort last (-1 is below every real
+	-- Unix second), which is what puts a flat legacy tmp file under the
+	-- grouped ones.
+	local a_created = M.artifact_created_at(a) or -1
+	local b_created = M.artifact_created_at(b) or -1
+	if a_created ~= b_created then
+		return a_created > b_created
+	end
 
-  local a_title = M.artifact_display_title(a):lower()
-  local b_title = M.artifact_display_title(b):lower()
-  if a_title ~= b_title then
-    return a_title < b_title
-  end
+	local a_title = M.artifact_display_title(a):lower()
+	local b_title = M.artifact_display_title(b):lower()
+	if a_title ~= b_title then
+		return a_title < b_title
+	end
 
-  local a_name = a.name or ""
-  local b_name = b.name or ""
-  if a_name ~= b_name then
-    return a_name < b_name
-  end
+	local a_name = a.name or ""
+	local b_name = b.name or ""
+	if a_name ~= b_name then
+		return a_name < b_name
+	end
 
-  return (a.path or "") < (b.path or "")
+	return (a.path or "") < (b.path or "")
 end
 
---- Turn a `cue list` payload into the picker's row list: keep the listed
---- artifact types (dropping any unknown or retired type), then order them
---- with context_artifact_less.
+--- Turn a `cue list` payload into the picker's row list: keep every
+--- well-formed row of ANY type, then order them with context_artifact_less.
+---
+--- Types are not filtered. cue owns the vocabulary, so a type this plugin
+--- has never heard of (a future cue release) still renders, in the trailing
+--- order group, with a fallback badge and colour -- visibility must not
+--- require a plugin release. Only malformed rows (no path) are dropped:
+--- the path is what Enter opens.
 ---
 --- Tasks are kept whatever their status: the spec requires them in this list,
 --- so no status filtering happens here.
 ---@param artifacts table|nil  decoded `cue list --json --frontmatter` output
 ---@return table  ordered rows (never nil)
 function M.context_artifacts_view(artifacts)
-  local rows = {}
-  if type(artifacts) ~= "table" then
-    return rows
-  end
-  for _, artifact in ipairs(artifacts) do
-    if type(artifact) == "table"
-       and type(artifact.path) == "string"
-       and config.CONTEXT_ARTIFACT_TYPE_RANK[artifact.type] then
-      rows[#rows + 1] = artifact
-    end
-  end
-  table.sort(rows, M.context_artifact_less)
-  return rows
+	local rows = {}
+	if type(artifacts) ~= "table" then
+		return rows
+	end
+	for _, artifact in ipairs(artifacts) do
+		if type(artifact) == "table" and type(artifact.path) == "string" then
+			rows[#rows + 1] = artifact
+		end
+	end
+	table.sort(rows, M.context_artifact_less)
+	return rows
 end
 
 --- The context browser's row label: the context title when it is a nonempty
@@ -407,14 +417,14 @@ end
 ---@param ctx table|nil  a `cue context list --json` row
 ---@return string
 function M.context_display_title(ctx)
-  if not ctx or ctx == vim.NIL or type(ctx) ~= "table" then
-    return ""
-  end
-  local title = ctx.title
-  if type(title) == "string" and title:match("%S") then
-    return title
-  end
-  return ctx.context or ""
+	if not ctx or ctx == vim.NIL or type(ctx) ~= "table" then
+		return ""
+	end
+	local title = ctx.title
+	if type(title) == "string" and title:match("%S") then
+		return title
+	end
+	return ctx.context or ""
 end
 
 --- Compact relative age for a Unix-seconds stamp: `now`, `12m`, `3h`,
@@ -430,23 +440,30 @@ end
 ---@param now number            Unix seconds, sampled by the caller
 ---@return string
 function M.relative_age(timestamp, now)
-  if type(timestamp) ~= "number" or timestamp ~= timestamp
-     or timestamp == math.huge or timestamp < 0 then
-    return "—"
-  end
-  local age = math.max(0, now - timestamp)
-  if age < 60 then return "now" end
-  if age < 3600 then return math.floor(age / 60) .. "m" end
-  if age < 86400 then return math.floor(age / 3600) .. "h" end
-  if age < 31536000 then return math.floor(age / 86400) .. "d" end
-  return math.floor(age / 31536000) .. "y"
+	if type(timestamp) ~= "number" or timestamp ~= timestamp or timestamp == math.huge or timestamp < 0 then
+		return "—"
+	end
+	local age = math.max(0, now - timestamp)
+	if age < 60 then
+		return "now"
+	end
+	if age < 3600 then
+		return math.floor(age / 60) .. "m"
+	end
+	if age < 86400 then
+		return math.floor(age / 3600) .. "h"
+	end
+	if age < 31536000 then
+		return math.floor(age / 86400) .. "d"
+	end
+	return math.floor(age / 31536000) .. "y"
 end
 
 --- Format last log activity (Unix seconds), not context modification time.
 --- A named view on M.relative_age: the column means "time since the last
 --- log entry", which the name records, while the formatting stays shared.
 function M.context_activity(timestamp, now)
-  return M.relative_age(timestamp, now)
+	return M.relative_age(timestamp, now)
 end
 
 --- Turn a decoded `cue context list --json` payload into the browser's rows
@@ -466,18 +483,16 @@ end
 ---@param contexts table|nil  decoded `cue context list --json` output
 ---@return table  rows in CLI order (never nil)
 function M.context_list_view(contexts)
-  local rows = {}
-  if type(contexts) ~= "table" then
-    return rows
-  end
-  for _, ctx in ipairs(contexts) do
-    if type(ctx) == "table"
-       and type(ctx.context) == "string"
-       and type(ctx.path) == "string" then
-      rows[#rows + 1] = ctx
-    end
-  end
-  return rows
+	local rows = {}
+	if type(contexts) ~= "table" then
+		return rows
+	end
+	for _, ctx in ipairs(contexts) do
+		if type(ctx) == "table" and type(ctx.context) == "string" and type(ctx.path) == "string" then
+			rows[#rows + 1] = ctx
+		end
+	end
+	return rows
 end
 
 --- Whether a `cue context list --json` row names the context that
@@ -495,15 +510,15 @@ end
 ---@param ctx table|nil     a `cue context list --json` row
 ---@return boolean
 function M.context_is_active(status, ctx)
-  if type(status) ~= "table" or type(ctx) ~= "table" then
-    return false
-  end
-  local scope = text_field(status.scope)
-  local slug = text_field(status.context)
-  if not scope or not slug then
-    return false
-  end
-  return scope == ctx.scope and slug == ctx.context
+	if type(status) ~= "table" or type(ctx) ~= "table" then
+		return false
+	end
+	local scope = text_field(status.scope)
+	local slug = text_field(status.context)
+	if not scope or not slug then
+		return false
+	end
+	return scope == ctx.scope and slug == ctx.context
 end
 
 --- The context browser's leading marker column: the pin tack, or one blank
@@ -526,7 +541,7 @@ end
 ---@param ctx table|nil  a `cue context list --json` row
 ---@return string  exactly one display cell
 function M.context_pin_marker(ctx)
-  return (type(ctx) == "table" and ctx.pinned == true) and config.PIN_GLYPH or " "
+	return (type(ctx) == "table" and ctx.pinned == true) and config.PIN_GLYPH or " "
 end
 
 --- Strip the file extension from an artifact name, yielding the task slug.
@@ -534,8 +549,10 @@ end
 ---@param name string|nil
 ---@return string|nil
 function M.task_slug(name)
-  if not name then return nil end
-  return (name:gsub("%.[^.]+$", ""))
+	if not name then
+		return nil
+	end
+	return (name:gsub("%.[^.]+$", ""))
 end
 
 --- Pure helper to compute a sorted list of scope slugs from task-card filenames.
@@ -543,35 +560,32 @@ end
 ---@param task_filenames table|nil list of task-card basenames (e.g. { "auth-login.md" })
 ---@return table sorted list of scope slugs
 function M.scope_set(task_filenames)
-  local slugs = { master = true }
-  if task_filenames then
-    for _, name in ipairs(task_filenames) do
-      local slug = M.task_slug(name)
-      if slug then
-        slugs[slug] = true
-      end
-    end
-  end
+	local slugs = { master = true }
+	if task_filenames then
+		for _, name in ipairs(task_filenames) do
+			local slug = M.task_slug(name)
+			if slug then
+				slugs[slug] = true
+			end
+		end
+	end
 
-  local result = {}
-  for slug, _ in pairs(slugs) do
-    table.insert(result, slug)
-  end
-  table.sort(result)
-  return result
+	local result = {}
+	for slug, _ in pairs(slugs) do
+		table.insert(result, slug)
+	end
+	table.sort(result)
+	return result
 end
 
 --- Slugify text for use as a filename
 ---@param text string|nil
 ---@return string|nil
 function M.slugify(text)
-  if not text then return nil end
-  return text:lower()
-    :gsub("[%s_/]+", "-")
-    :gsub("[^%w%-]+", "")
-    :gsub("%-+", "-")
-    :gsub("^%-+", "")
-    :gsub("%-+$", "")
+	if not text then
+		return nil
+	end
+	return text:lower():gsub("[%s_/]+", "-"):gsub("[^%w%-]+", ""):gsub("%-+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
 end
 
 --- Convert a slug (or raw slug-ish text) into a human-readable title.
@@ -589,28 +603,30 @@ end
 ---@param text string|nil
 ---@return string  title, or "" for nil/empty/no-word input
 function M.slug_to_title(text)
-  if not text or text == "" then return "" end
-  local words = {}
-  -- [\128-\255] keeps multi-byte sequences together (see comment above).
-  for word in text:gmatch("[%w'\128-\255]+") do
-    -- Skip tokens with no core content (a stray "'" or "'''").
-    if word:match("[%w\128-\255]") then
-      local is_acronym = (#word >= 2 and #word <= 4 and word:match("^[A-Z]+$") ~= nil)
-      if is_acronym then
-        table.insert(words, word)
-      else
-        -- Capitalise the first ASCII alphanumeric so "'tis" -> "'Tis".
-        local lead, first, tail = word:match("^([^%w]*)(%w)(.*)$")
-        if first then
-          table.insert(words, lead .. first:upper() .. tail:lower())
-        else
-          -- No ASCII alnum (e.g. pure CJK): emit as-is.
-          table.insert(words, word)
-        end
-      end
-    end
-  end
-  return table.concat(words, " ")
+	if not text or text == "" then
+		return ""
+	end
+	local words = {}
+	-- [\128-\255] keeps multi-byte sequences together (see comment above).
+	for word in text:gmatch("[%w'\128-\255]+") do
+		-- Skip tokens with no core content (a stray "'" or "'''").
+		if word:match("[%w\128-\255]") then
+			local is_acronym = (#word >= 2 and #word <= 4 and word:match("^[A-Z]+$") ~= nil)
+			if is_acronym then
+				table.insert(words, word)
+			else
+				-- Capitalise the first ASCII alphanumeric so "'tis" -> "'Tis".
+				local lead, first, tail = word:match("^([^%w]*)(%w)(.*)$")
+				if first then
+					table.insert(words, lead .. first:upper() .. tail:lower())
+				else
+					-- No ASCII alnum (e.g. pure CJK): emit as-is.
+					table.insert(words, word)
+				end
+			end
+		end
+	end
+	return table.concat(words, " ")
 end
 
 --- Pure helper that computes the filename and add() opts for a slug-based
@@ -631,48 +647,50 @@ end
 ---                   or nil when the type is not a slug type or the slug
 ---                   normalises to empty
 function M.slug_artifact_plan(type, raw_slug, context, extra_fm)
-  if not config.SLUG_TYPES[type] then
-    return nil
-  end
-  local slug = M.slugify(raw_slug)
-  if not slug or slug == "" then
-    return nil
-  end
-  -- Derive a human-readable title from the RAW slug (pre-slugify) so
-  -- acronyms typed in capitals survive (e.g. "WSS-migration" -> "WSS
-  -- Migration"). Merge over TYPE_DEFAULTS without vim.tbl_extend to keep
-  -- this helper vim-free (unit-testable under the vim={} stub).
-  -- Shallow copy is sufficient: TYPE_DEFAULTS values are scalars only.
-  local defaults = config.TYPE_DEFAULTS[type] or {}
-  local frontmatter = {}
-  for k, v in pairs(defaults) do frontmatter[k] = v end
+	if not config.SLUG_TYPES[type] then
+		return nil
+	end
+	local slug = M.slugify(raw_slug)
+	if not slug or slug == "" then
+		return nil
+	end
+	-- Derive a human-readable title from the RAW slug (pre-slugify) so
+	-- acronyms typed in capitals survive (e.g. "WSS-migration" -> "WSS
+	-- Migration"). Merge over TYPE_DEFAULTS without vim.tbl_extend to keep
+	-- this helper vim-free (unit-testable under the vim={} stub).
+	-- Shallow copy is sufficient: TYPE_DEFAULTS values are scalars only.
+	local defaults = config.TYPE_DEFAULTS[type] or {}
+	local frontmatter = {}
+	for k, v in pairs(defaults) do
+		frontmatter[k] = v
+	end
 
-  if extra_fm and _G.type(extra_fm) == "table" then
-    for k, v in pairs(extra_fm) do
-      if v ~= nil and v ~= "" and v ~= vim.NIL then
-        frontmatter[k] = v
-      end
-    end
-  end
+	if extra_fm and _G.type(extra_fm) == "table" then
+		for k, v in pairs(extra_fm) do
+			if v ~= nil and v ~= "" and v ~= vim.NIL then
+				frontmatter[k] = v
+			end
+		end
+	end
 
-  -- Only set a title that contains at least one letter. A digit-only slug
-  -- (e.g. "2026") would yield title="2026", which `cue add` emits as a YAML
-  -- number (coerce_scalar leaves it unquoted); the picker then assigns that
-  -- number straight to display_name, which must be a string. A digit "title"
-  -- is not useful anyway, so omit it.
-  local title = M.slug_to_title(raw_slug)
-  if title:match("%a") and not frontmatter.title then
-    frontmatter.title = title
-  end
+	-- Only set a title that contains at least one letter. A digit-only slug
+	-- (e.g. "2026") would yield title="2026", which `cue add` emits as a YAML
+	-- number (coerce_scalar leaves it unquoted); the picker then assigns that
+	-- number straight to display_name, which must be a string. A digit "title"
+	-- is not useful anyway, so omit it.
+	local title = M.slug_to_title(raw_slug)
+	if title:match("%a") and not frontmatter.title then
+		frontmatter.title = title
+	end
 
-  return {
-    filename = slug .. ".md",
-    opts = {
-      category    = type,
-      context     = context,
-      frontmatter = frontmatter,
-    },
-  }
+	return {
+		filename = slug .. ".md",
+		opts = {
+			category = type,
+			context = context,
+			frontmatter = frontmatter,
+		},
+	}
 end
 
 --- Pure helper that computes the filename and add() opts for a path-based
@@ -691,24 +709,26 @@ end
 ---@return table|nil  { filename=..., opts={ category, context, frontmatter } },
 ---                   or nil when the path is empty/whitespace-only
 function M.path_artifact_plan(type, path, context)
-  if not path or path:match("%S") == nil then
-    return nil
-  end
+	if not path or path:match("%S") == nil then
+		return nil
+	end
 
-  local frontmatter = {}
-  if path:match("%.md$") then
-    local defaults = config.TYPE_DEFAULTS[type] or {}
-    for k, v in pairs(defaults) do frontmatter[k] = v end
-  end
+	local frontmatter = {}
+	if path:match("%.md$") then
+		local defaults = config.TYPE_DEFAULTS[type] or {}
+		for k, v in pairs(defaults) do
+			frontmatter[k] = v
+		end
+	end
 
-  return {
-    filename = path,
-    opts = {
-      category    = type,
-      context     = context,
-      frontmatter = frontmatter,
-    },
-  }
+	return {
+		filename = path,
+		opts = {
+			category = type,
+			context = context,
+			frontmatter = frontmatter,
+		},
+	}
 end
 
 --- Execute a command (as an arg list) and return its stdout.
@@ -717,11 +737,11 @@ end
 ---@param cmd table  command as a list of arguments (no shell involved)
 ---@return string|nil, string|nil
 function M.execute_command(cmd)
-  local obj = vim.system(cmd, { text = true }):wait()
-  if obj.code ~= 0 then
-    return nil, "Command failed"
-  end
-  return obj.stdout
+	local obj = vim.system(cmd, { text = true }):wait()
+	if obj.code ~= 0 then
+		return nil, "Command failed"
+	end
+	return obj.stdout
 end
 
 --- Parse a JSON string using the native Lua JSON decoder (vim.json).
@@ -729,23 +749,25 @@ end
 ---@param json_str string
 ---@return any, string|nil
 function M.parse_json(json_str)
-  local ok, result = pcall(vim.json.decode, json_str)
-  if not ok then
-    return nil, "Failed to parse JSON"
-  end
-  return result
+	local ok, result = pcall(vim.json.decode, json_str)
+	if not ok then
+		return nil, "Failed to parse JSON"
+	end
+	return result
 end
 
 --- Get the current git branch name (with / replaced by -)
 ---@return string|nil
 function M.get_current_branch()
-  local obj = vim.system({ 'git', 'rev-parse', '--abbrev-ref', 'HEAD' }, { text = true }):wait()
-  if obj.code ~= 0 then
-    return nil
-  end
-  local branch = (obj.stdout or ""):gsub("%s+", "")
-  if branch == "" then return nil end
-  return branch:gsub("/", "-")
+	local obj = vim.system({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, { text = true }):wait()
+	if obj.code ~= 0 then
+		return nil
+	end
+	local branch = (obj.stdout or ""):gsub("%s+", "")
+	if branch == "" then
+		return nil
+	end
+	return branch:gsub("/", "-")
 end
 
 --- Query cue status for the active context slug.
@@ -761,23 +783,23 @@ end
 ---@param opts table|nil  supports: dir (string, -C), store (string, --store)
 ---@return string|nil context_slug, table|nil full_status, string|nil error_message
 function M.get_active_context(opts)
-  local cmd = M.active_context_argv(opts)
-  local output, err = M.execute_command(cmd)
-  if not output or output == "" then
-    return nil, nil, err or "no output from cue status"
-  end
+	local cmd = M.active_context_argv(opts)
+	local output, err = M.execute_command(cmd)
+	if not output or output == "" then
+		return nil, nil, err or "no output from cue status"
+	end
 
-  local ok, status = pcall(vim.json.decode, output)
-  if not ok or type(status) ~= "table" then
-    return nil, nil, "invalid JSON from cue status"
-  end
+	local ok, status = pcall(vim.json.decode, output)
+	if not ok or type(status) ~= "table" then
+		return nil, nil, "invalid JSON from cue status"
+	end
 
-  local decision = M.active_context_decision(status)
-  if decision.action == "notify" then
-    return nil, status, nil
-  end
+	local decision = M.active_context_decision(status)
+	if decision.action == "notify" then
+		return nil, status, nil
+	end
 
-  return decision.context, status, nil
+	return decision.context, status, nil
 end
 
 --- Build the `cue context switch <slug>` argv.
@@ -792,23 +814,23 @@ end
 ---@param opts table|nil   supports: dir (string, -C), store (string, --store)
 ---@return table|nil  argv list, or nil when the slug is missing
 function M.switch_context_argv(slug, opts)
-  local ctx = M.normalize_context(slug)
-  if not ctx then
-    return nil
-  end
-  opts = opts or {}
+	local ctx = M.normalize_context(slug)
+	if not ctx then
+		return nil
+	end
+	opts = opts or {}
 
-  local cmd = { 'cue', 'context', 'switch' }
-  if type(opts.dir) == "string" and opts.dir ~= "" then
-    table.insert(cmd, '-C')
-    table.insert(cmd, opts.dir)
-  end
-  if type(opts.store) == "string" and opts.store ~= "" then
-    table.insert(cmd, '--store')
-    table.insert(cmd, opts.store)
-  end
-  table.insert(cmd, ctx)
-  return cmd
+	local cmd = { "cue", "context", "switch" }
+	if type(opts.dir) == "string" and opts.dir ~= "" then
+		table.insert(cmd, "-C")
+		table.insert(cmd, opts.dir)
+	end
+	if type(opts.store) == "string" and opts.store ~= "" then
+		table.insert(cmd, "--store")
+		table.insert(cmd, opts.store)
+	end
+	table.insert(cmd, ctx)
+	return cmd
 end
 
 --- Associate a cue context with the current git branch.
@@ -816,19 +838,19 @@ end
 ---@param slug string  context slug
 ---@param opts table|nil  supports: dir (string, -C), store (string, --store)
 function M.switch_context(slug, opts)
-  local cmd = M.switch_context_argv(slug, opts)
-  if not cmd then
-    vim.notify("cue: a context slug is required to switch", vim.log.levels.ERROR)
-    return
-  end
+	local cmd = M.switch_context_argv(slug, opts)
+	if not cmd then
+		vim.notify("cue: a context slug is required to switch", vim.log.levels.ERROR)
+		return
+	end
 
-  local obj = vim.system(cmd, { text = true }):wait()
-  if obj.code == 0 then
-    vim.notify("cue: switched to " .. cmd[#cmd], vim.log.levels.INFO)
-  else
-    local msg = vim.trim((obj.stderr or "") ~= "" and obj.stderr or (obj.stdout or "unknown"))
-    vim.notify("cue context switch failed: " .. msg, vim.log.levels.ERROR)
-  end
+	local obj = vim.system(cmd, { text = true }):wait()
+	if obj.code == 0 then
+		vim.notify("cue: switched to " .. cmd[#cmd], vim.log.levels.INFO)
+	else
+		local msg = vim.trim((obj.stderr or "") ~= "" and obj.stderr or (obj.stdout or "unknown"))
+		vim.notify("cue context switch failed: " .. msg, vim.log.levels.ERROR)
+	end
 end
 
 -- ─── Scope confirmation ───────────────────────────────────────────────────────
@@ -850,55 +872,54 @@ end
 ---  store (string, --store)
 ---@return string[]
 function M.list_contexts_argv(opts)
-  local cmd = { 'cue', 'context', 'list' }
-  if opts and opts.json then
-    table.insert(cmd, '--json')
-  end
-  if opts and opts.pinned == true then
-    table.insert(cmd, '--pinned')
-  end
-  if opts and (opts.scope == "repo" or opts.scope == "store") then
-    table.insert(cmd, '--scope')
-    table.insert(cmd, opts.scope)
-  end
-  if opts and opts.sort == "recency" then
-    table.insert(cmd, '--sort')
-    table.insert(cmd, opts.sort)
-  end
-  if opts and type(opts.limit) == "number"
-     and opts.limit > 0 and opts.limit % 1 == 0 then
-    table.insert(cmd, '--limit')
-    table.insert(cmd, tostring(opts.limit))
-  end
-  if opts and opts.dir then
-    table.insert(cmd, '-C')
-    table.insert(cmd, opts.dir)
-  end
-  if opts and opts.store then
-    table.insert(cmd, '--store')
-    table.insert(cmd, opts.store)
-  end
-  return cmd
+	local cmd = { "cue", "context", "list" }
+	if opts and opts.json then
+		table.insert(cmd, "--json")
+	end
+	if opts and opts.pinned == true then
+		table.insert(cmd, "--pinned")
+	end
+	if opts and (opts.scope == "repo" or opts.scope == "store") then
+		table.insert(cmd, "--scope")
+		table.insert(cmd, opts.scope)
+	end
+	if opts and opts.sort == "recency" then
+		table.insert(cmd, "--sort")
+		table.insert(cmd, opts.sort)
+	end
+	if opts and type(opts.limit) == "number" and opts.limit > 0 and opts.limit % 1 == 0 then
+		table.insert(cmd, "--limit")
+		table.insert(cmd, tostring(opts.limit))
+	end
+	if opts and opts.dir then
+		table.insert(cmd, "-C")
+		table.insert(cmd, opts.dir)
+	end
+	if opts and opts.store then
+		table.insert(cmd, "--store")
+		table.insert(cmd, opts.store)
+	end
+	return cmd
 end
 
 --- Return a sorted list of context slugs in the repository scope via `cue context list`.
 ---@param opts table|nil  supports: dir (`cue -C`), store (`cue --store`)
 ---@return string[]|nil
 function M.list_contexts(opts)
-  local cmd = M.list_contexts_argv(opts)
-  local output, _ = M.execute_command(cmd)
-  if not output or output == "" then
-    return nil
-  end
-  local contexts = {}
-  for line in output:gmatch("[^\r\n]+") do
-    local slug = vim.trim(line)
-    if slug ~= "" then
-      table.insert(contexts, slug)
-    end
-  end
-  table.sort(contexts)
-  return contexts
+	local cmd = M.list_contexts_argv(opts)
+	local output, _ = M.execute_command(cmd)
+	if not output or output == "" then
+		return nil
+	end
+	local contexts = {}
+	for line in output:gmatch("[^\r\n]+") do
+		local slug = vim.trim(line)
+		if slug ~= "" then
+			table.insert(contexts, slug)
+		end
+	end
+	table.sort(contexts)
+	return contexts
 end
 
 --- Confirm or prompt for target context for a new artifact.
@@ -911,46 +932,52 @@ end
 ---@param context string|nil  pre-set context override, or nil to prompt
 ---@param callback function   called with the resolved context slug (string)
 function M.confirm_scope(type, context, callback)
-  if context ~= nil then
-    callback(context)
-    return
-  end
+	if context ~= nil then
+		callback(context)
+		return
+	end
 
-  local Snacks = require('snacks')
-  local active = M.get_active_context()
+	local Snacks = require("snacks")
+	local active = M.get_active_context()
 
-  local function select_from_all_contexts()
-    local contexts = M.list_contexts()
-    if not contexts or #contexts == 0 then
-      vim.notify("No contexts found. Create a context first with 'cue context create'.", vim.log.levels.ERROR)
-      return
-    end
-    Snacks.picker.select(contexts, { prompt = "Select context (" .. type .. "):" }, function(slug)
-      if slug then callback(slug) end
-    end)
-  end
+	local function select_from_all_contexts()
+		local contexts = M.list_contexts()
+		if not contexts or #contexts == 0 then
+			vim.notify("No contexts found. Create a context first with 'cue context create'.", vim.log.levels.ERROR)
+			return
+		end
+		Snacks.picker.select(contexts, { prompt = "Select context (" .. type .. "):" }, function(slug)
+			if slug then
+				callback(slug)
+			end
+		end)
+	end
 
-  if not active then
-    select_from_all_contexts()
-    return
-  end
+	if not active then
+		select_from_all_contexts()
+		return
+	end
 
-  local items = {
-    { label = "current: " .. active, value = active },
-    { label = "select context...",   value = "__pick__" },
-  }
+	local items = {
+		{ label = "current: " .. active, value = active },
+		{ label = "select context...", value = "__pick__" },
+	}
 
-  Snacks.picker.select(items, {
-    prompt = "Context for new " .. type .. ":",
-    format_item = function(item) return item.label end,
-  }, function(choice)
-    if not choice then return end
-    if choice.value ~= "__pick__" then
-      callback(choice.value)
-      return
-    end
-    select_from_all_contexts()
-  end)
+	Snacks.picker.select(items, {
+		prompt = "Context for new " .. type .. ":",
+		format_item = function(item)
+			return item.label
+		end,
+	}, function(choice)
+		if not choice then
+			return
+		end
+		if choice.value ~= "__pick__" then
+			callback(choice.value)
+			return
+		end
+		select_from_all_contexts()
+	end)
 end
 
 -- ─── Public API ───────────────────────────────────────────────────────────────
@@ -967,46 +994,46 @@ end
 --- navigation binding is exactly the implicit-context habit the central-store
 --- model removes. With no active context this reports and stops.
 function M.open_context()
-  local ctx, status, err = M.get_active_context()
-  if not ctx then
-    vim.notify("cue: " .. (err or "no active context"), vim.log.levels.ERROR)
-    return
-  end
+	local ctx, status, err = M.get_active_context()
+	if not ctx then
+		vim.notify("cue: " .. (err or "no active context"), vim.log.levels.ERROR)
+		return
+	end
 
-  local path = M.active_context_path(status)
-  if not path then
-    vim.notify("cue: status reported no store/address for " .. ctx, vim.log.levels.ERROR)
-    return
-  end
+	local path = M.active_context_path(status)
+	if not path then
+		vim.notify("cue: status reported no store/address for " .. ctx, vim.log.levels.ERROR)
+		return
+	end
 
-  if vim.fn.filereadable(path) == 0 then
-    vim.notify("cue: context file does not exist: " .. path, vim.log.levels.ERROR)
-    return
-  end
+	if vim.fn.filereadable(path) == 0 then
+		vim.notify("cue: context file does not exist: " .. path, vim.log.levels.ERROR)
+		return
+	end
 
-  vim.cmd.edit(path)
+	vim.cmd.edit(path)
 end
 
 --- Scan .cue/master/task/ for task cards and return a sorted list of slugs.
 --- Always includes "master". Returns nil if .cue/ is absent.
 ---@return table|nil sorted list of scope slugs, or nil if no .cue/ found
 function M.list_scopes()
-  local cue_dir = ".cue"
-  if vim.fn.isdirectory(cue_dir) == 0 then
-    return nil
-  end
+	local cue_dir = ".cue"
+	if vim.fn.isdirectory(cue_dir) == 0 then
+		return nil
+	end
 
-  local task_dir = ".cue/master/task"
-  local names = {}
-  if vim.fn.isdirectory(task_dir) ~= 0 then
-    for name, kind in vim.fs.dir(task_dir) do
-      if kind == "file" and name:match("%.md$") then
-        table.insert(names, name)
-      end
-    end
-  end
+	local task_dir = ".cue/master/task"
+	local names = {}
+	if vim.fn.isdirectory(task_dir) ~= 0 then
+		for name, kind in vim.fs.dir(task_dir) do
+			if kind == "file" and name:match("%.md$") then
+				table.insert(names, name)
+			end
+		end
+	end
 
-  return M.scope_set(names)
+	return M.scope_set(names)
 end
 
 --- Add a new artifact file via `cue add` and open it for editing
@@ -1014,116 +1041,116 @@ end
 ---@param opts table|nil
 ---@return string|nil, string|nil
 function M.add(filename, opts)
-  opts = opts or {}
+	opts = opts or {}
 
-  if not filename or filename == "" then
-    vim.notify("Error: filename is required", vim.log.levels.ERROR)
-    return nil
-  end
+	if not filename or filename == "" then
+		vim.notify("Error: filename is required", vim.log.levels.ERROR)
+		return nil
+	end
 
-  local cmd = { 'cue', 'add', filename }
+	local cmd = { "cue", "add", filename }
 
-  if opts.category then
-    table.insert(cmd, '--type')
-    table.insert(cmd, opts.category)
-  end
+	if opts.category then
+		table.insert(cmd, "--type")
+		table.insert(cmd, opts.category)
+	end
 
-  local context = opts.context or opts.task
-  if context then
-    table.insert(cmd, '--context')
-    table.insert(cmd, context)
-  end
+	local context = opts.context or opts.task
+	if context then
+		table.insert(cmd, "--context")
+		table.insert(cmd, context)
+	end
 
-  if opts.dir then
-    table.insert(cmd, '-C')
-    table.insert(cmd, opts.dir)
-  end
+	if opts.dir then
+		table.insert(cmd, "-C")
+		table.insert(cmd, opts.dir)
+	end
 
-  if opts.store then
-    table.insert(cmd, '--store')
-    table.insert(cmd, opts.store)
-  end
+	if opts.store then
+		table.insert(cmd, "--store")
+		table.insert(cmd, opts.store)
+	end
 
-  if opts.frontmatter then
-    for k, v in pairs(opts.frontmatter) do
-      if type(v) == "table" then
-        -- Array value: emit one --frontmatter flag per element. A repeated
-        -- key becomes a YAML list in the output (see `cue add`). An empty
-        -- table yields no flags (no frontmatter value).
-        for _, el in ipairs(v) do
-          table.insert(cmd, '--frontmatter')
-          table.insert(cmd, string.format("%s=%s", k, el))
-        end
-      else
-        table.insert(cmd, '--frontmatter')
-        table.insert(cmd, string.format("%s=%s", k, v))
-      end
-    end
-  end
+	if opts.frontmatter then
+		for k, v in pairs(opts.frontmatter) do
+			if type(v) == "table" then
+				-- Array value: emit one --frontmatter flag per element. A repeated
+				-- key becomes a YAML list in the output (see `cue add`). An empty
+				-- table yields no flags (no frontmatter value).
+				for _, el in ipairs(v) do
+					table.insert(cmd, "--frontmatter")
+					table.insert(cmd, string.format("%s=%s", k, el))
+				end
+			else
+				table.insert(cmd, "--frontmatter")
+				table.insert(cmd, string.format("%s=%s", k, v))
+			end
+		end
+	end
 
-  if opts.force then
-    table.insert(cmd, '--force')
-  end
+	if opts.force then
+		table.insert(cmd, "--force")
+	end
 
-  local obj = vim.system(cmd, { text = true }):wait()
+	local obj = vim.system(cmd, { text = true }):wait()
 
-  if obj.code ~= 0 then
-    local error_msg = (obj.stderr and obj.stderr ~= "") and obj.stderr or obj.stdout
-    error_msg = vim.trim(error_msg or "Unknown error")
-    vim.notify("Cue Error: " .. error_msg, vim.log.levels.ERROR)
-    return nil, error_msg
-  end
+	if obj.code ~= 0 then
+		local error_msg = (obj.stderr and obj.stderr ~= "") and obj.stderr or obj.stdout
+		error_msg = vim.trim(error_msg or "Unknown error")
+		vim.notify("Cue Error: " .. error_msg, vim.log.levels.ERROR)
+		return nil, error_msg
+	end
 
-  local filepath = vim.trim(obj.stdout or "")
-  if filepath == "" then
-    vim.notify("Error: failed to get file path from cue add output", vim.log.levels.ERROR)
-    return nil
-  end
+	local filepath = vim.trim(obj.stdout or "")
+	if filepath == "" then
+		vim.notify("Error: failed to get file path from cue add output", vim.log.levels.ERROR)
+		return nil
+	end
 
-  vim.notify("Successfully added: " .. filename, vim.log.levels.INFO)
-  vim.cmd.edit(filepath)
-  vim.cmd("normal! G")
-  vim.cmd("startinsert!")
+	vim.notify("Successfully added: " .. filename, vim.log.levels.INFO)
+	vim.cmd.edit(filepath)
+	vim.cmd("normal! G")
+	vim.cmd("startinsert!")
 
-  return filepath
+	return filepath
 end
 
 --- Prompt for parent task selection from available scopes
 ---@param callback function called with selected parent slug or nil
 function M.prompt_parent(callback)
-  local Snacks = require('snacks')
-  local scopes = M.list_scopes() or { "master" }
-  local active = M.get_active_context()
+	local Snacks = require("snacks")
+	local scopes = M.list_scopes() or { "master" }
+	local active = M.get_active_context()
 
-  local items = {
-    { label = "(None)", value = nil, desc = "No parent link" },
-  }
+	local items = {
+		{ label = "(None)", value = nil, desc = "No parent link" },
+	}
 
-  if active and active ~= "master" then
-    table.insert(items, { label = "active: " .. active, value = active, desc = "Active task context" })
-  end
+	if active and active ~= "master" then
+		table.insert(items, { label = "active: " .. active, value = active, desc = "Active task context" })
+	end
 
-  for _, slug in ipairs(scopes) do
-    if slug ~= "master" and slug ~= active then
-      table.insert(items, { label = slug, value = slug, desc = "Task card" })
-    end
-  end
+	for _, slug in ipairs(scopes) do
+		if slug ~= "master" and slug ~= active then
+			table.insert(items, { label = slug, value = slug, desc = "Task card" })
+		end
+	end
 
-  Snacks.picker.select(items, {
-    prompt = "Select Parent Task:",
-    format_item = function(item)
-      if item.desc then
-        return string.format("%-30s  %s", item.label, item.desc)
-      end
-      return item.label
-    end,
-  }, function(choice)
-    if choice then
-      callback(choice.value)
-    else
-      callback(nil)
-    end
-  end)
+	Snacks.picker.select(items, {
+		prompt = "Select Parent Task:",
+		format_item = function(item)
+			if item.desc then
+				return string.format("%-30s  %s", item.label, item.desc)
+			end
+			return item.label
+		end,
+	}, function(choice)
+		if choice then
+			callback(choice.value)
+		else
+			callback(nil)
+		end
+	end)
 end
 
 --- Prompt for a slug, confirm scope, then add a markdown artifact of the
@@ -1137,37 +1164,36 @@ end
 ---@param context string|nil  override context (nil = prompt via confirm_scope)
 ---@param extra_fm table|nil  extra frontmatter fields (e.g. { parent = "refine-cue-skills" })
 function M.add_with_slug(type, context, extra_fm)
-  if not config.SLUG_TYPES[type] then
-    vim.notify(
-      "Error: '" .. type .. "' is not a slug-based markdown type; use add_with_path",
-      vim.log.levels.ERROR
-    )
-    return
-  end
-  local Snacks = require('snacks')
-  Snacks.input({
-    prompt = "Slug (" .. type .. "):",
-    win = { row = 0.3 },
-  }, function(raw_slug)
-    if not raw_slug or raw_slug == "" then return end
-    -- Bail before the scope dialog if the slug normalises to nothing.
-    local slug = M.slugify(raw_slug)
-    if not slug or slug == "" then
-      vim.notify("Error: slug is empty after normalisation", vim.log.levels.ERROR)
-      return
-    end
-    M.confirm_scope(type, context, function(target_context)
-      local plan = M.slug_artifact_plan(type, raw_slug, target_context, extra_fm)
-      M.add(plan.filename, plan.opts)
-    end)
-  end)
+	if not config.SLUG_TYPES[type] then
+		vim.notify("Error: '" .. type .. "' is not a slug-based markdown type; use add_with_path", vim.log.levels.ERROR)
+		return
+	end
+	local Snacks = require("snacks")
+	Snacks.input({
+		prompt = "Slug (" .. type .. "):",
+		win = { row = 0.3 },
+	}, function(raw_slug)
+		if not raw_slug or raw_slug == "" then
+			return
+		end
+		-- Bail before the scope dialog if the slug normalises to nothing.
+		local slug = M.slugify(raw_slug)
+		if not slug or slug == "" then
+			vim.notify("Error: slug is empty after normalisation", vim.log.levels.ERROR)
+			return
+		end
+		M.confirm_scope(type, context, function(target_context)
+			local plan = M.slug_artifact_plan(type, raw_slug, target_context, extra_fm)
+			M.add(plan.filename, plan.opts)
+		end)
+	end)
 end
 
 --- Prompt for a task slug, then create the task card.
 --- The slug is used as the filename stem (e.g. "my-feature" → "my-feature.md").
 ---@param context string|nil  override context (nil = prompt via confirm_scope)
 function M.add_task(context)
-  M.add_with_slug("task", context)
+	M.add_with_slug("task", context)
 end
 
 --- Prompt for a title, then confirm scope, then add an artifact of the given type.
@@ -1175,24 +1201,26 @@ end
 ---@param type string  artifact type (e.g. "task", "plan", "note")
 ---@param context string|nil  override context (nil = prompt via confirm_scope)
 function M.add_with_title(type, context)
-  local Snacks = require('snacks')
-  Snacks.input({
-    prompt = "Title (" .. type .. "):",
-    win = { row = 0.3 },
-  }, function(title)
-    if not title or title == "" then return end
-    M.confirm_scope(type, context, function(target_context)
-      local filename = M.slugify(title) .. ".md"
-      local defaults = config.TYPE_DEFAULTS[type] or {}
-      -- Title wins over TYPE_DEFAULTS (matches slug_artifact_plan ordering).
-      local frontmatter = vim.tbl_extend("force", defaults, { title = title })
-      M.add(filename, {
-        category    = type,
-        context     = target_context,
-        frontmatter = frontmatter,
-      })
-    end)
-  end)
+	local Snacks = require("snacks")
+	Snacks.input({
+		prompt = "Title (" .. type .. "):",
+		win = { row = 0.3 },
+	}, function(title)
+		if not title or title == "" then
+			return
+		end
+		M.confirm_scope(type, context, function(target_context)
+			local filename = M.slugify(title) .. ".md"
+			local defaults = config.TYPE_DEFAULTS[type] or {}
+			-- Title wins over TYPE_DEFAULTS (matches slug_artifact_plan ordering).
+			local frontmatter = vim.tbl_extend("force", defaults, { title = title })
+			M.add(filename, {
+				category = type,
+				context = target_context,
+				frontmatter = frontmatter,
+			})
+		end)
+	end)
 end
 
 --- Prompt for a file path, then confirm scope, then add an artifact of the
@@ -1202,39 +1230,43 @@ end
 ---@param type string  artifact type (e.g. "trace", "spec")
 ---@param context string|nil  override context (nil = prompt via confirm_scope)
 function M.add_with_path(type, context)
-  local Snacks = require('snacks')
-  Snacks.input({
-    prompt = "Path (" .. type .. "):",
-    completion = "file",
-    win = { row = 0.3 },
-  }, function(path)
-    if not path or path == "" then return end
-    M.confirm_scope(type, context, function(target_context)
-      local plan = M.path_artifact_plan(type, path, target_context)
-      if not plan then
-        vim.notify("Error: path is empty", vim.log.levels.ERROR)
-        return
-      end
-      M.add(plan.filename, plan.opts)
-    end)
-  end)
+	local Snacks = require("snacks")
+	Snacks.input({
+		prompt = "Path (" .. type .. "):",
+		completion = "file",
+		win = { row = 0.3 },
+	}, function(path)
+		if not path or path == "" then
+			return
+		end
+		M.confirm_scope(type, context, function(target_context)
+			local plan = M.path_artifact_plan(type, path, target_context)
+			if not plan then
+				vim.notify("Error: path is empty", vim.log.levels.ERROR)
+				return
+			end
+			M.add(plan.filename, plan.opts)
+		end)
+	end)
 end
 
 --- Prompt for a spec path, then confirm scope, then add a spec artifact.
 --- When context is non-nil the scope dialog is skipped (caller already pinned context).
 ---@param context string|nil  override context (nil = prompt via confirm_scope)
 function M.add_spec(context)
-  local Snacks = require('snacks')
-  Snacks.input({
-    prompt = "Spec path:",
-    completion = "file",
-    win = { row = 0.3 },
-  }, function(path)
-    if not path or path == "" then return end
-    M.confirm_scope("spec", context, function(target_context)
-      M.add(path, { category = "spec", context = target_context })
-    end)
-  end)
+	local Snacks = require("snacks")
+	Snacks.input({
+		prompt = "Spec path:",
+		completion = "file",
+		win = { row = 0.3 },
+	}, function(path)
+		if not path or path == "" then
+			return
+		end
+		M.confirm_scope("spec", context, function(target_context)
+			M.add(path, { category = "spec", context = target_context })
+		end)
+	end)
 end
 
 return M
