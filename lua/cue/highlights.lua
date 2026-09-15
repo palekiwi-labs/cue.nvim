@@ -28,6 +28,12 @@ function M.setup()
   vim.api.nvim_set_hl(0, "CueMarkerActive", { fg = COLORS.cyan, bold = true })
   vim.api.nvim_set_hl(0, "CueMarkerInProgress", { fg = COLORS.yellow, bold = true })
 
+  -- Pin marker in the context browser. Orange keeps the working-set signal
+  -- distinct from the cyan active marker and the yellow in-progress marker;
+  -- an active row is pinned too and renders wholly in CueMarkerActive, so
+  -- this colour only ever means "pinned, not the branch's context".
+  vim.api.nvim_set_hl(0, "CueMarkerPinned", { fg = COLORS.orange, bold = true })
+
   vim.api.nvim_set_hl(0, "CueCategorySpec", { fg = COLORS.pink, bold = false })
   vim.api.nvim_set_hl(0, "CueCategoryPlan", { fg = COLORS.purple, bold = false })
   vim.api.nvim_set_hl(0, "CueCategoryTask", { fg = COLORS.cyan, bold = false })

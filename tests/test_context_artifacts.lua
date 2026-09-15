@@ -9,17 +9,17 @@
 --
 --   core.context_artifacts_argv(context, opts)
 --     `cue list --context <ctx> --json --frontmatter --type ...` argv, with
---     one --type flag per approved group (task/spec/plan/note/trace, in that
---     order). bin/tmp are deferred, so they are never requested. Optional
---     repo dir (-C) and store root (--store) are supported.
+--     one --type flag per listed group (task/spec/plan/note/trace, then the
+--     non-markdown bin/tmp, in that order). Optional repo dir (-C) and store
+--     root (--store) are supported.
 --
 --   core.artifact_display_title(artifact)
 --     frontmatter.title when it is a nonempty string, else the filename.
 --
 --   core.context_artifacts_view(artifacts)
---     Filter to the five approved types, then order by group
---     (task, spec, plan, note, trace) and alphabetically by displayed title
---     within a group.
+--     Filter to the seven listed types, then order by group
+--     (task, spec, plan, note, trace, bin, tmp) and alphabetically by
+--     displayed title within a group.
 --
 -- Mocks the minimal `vim` global so the real module can be required without
 -- a running Neovim instance.
@@ -113,7 +113,7 @@ end)
 
 -- ─── context_artifacts_argv ───────────────────────────────────────────
 
-check("argv requests exactly the five approved types, in spec order", function()
+check("argv requests exactly the seven listed types, in display order", function()
 	assert_argv(core.context_artifacts_argv("demo"), {
 		"cue",
 		"list",
@@ -131,15 +131,19 @@ check("argv requests exactly the five approved types, in spec order", function()
 		"note",
 		"--type",
 		"trace",
+		"--type",
+		"bin",
+		"--type",
+		"tmp",
 	})
 end)
 
-check("argv never requests the deferred bin/tmp types", function()
+check("argv appends bin and tmp after the markdown groups", function()
+	-- The markdown groups keep their spec order; the non-markdown types are
+	-- appended rather than interleaved, so the existing rows do not move.
 	local argv = core.context_artifacts_argv("demo")
-	for _, arg in ipairs(argv) do
-		assert(arg ~= "bin", "bin is deferred and must not be requested")
-		assert(arg ~= "tmp", "tmp is deferred and must not be requested")
-	end
+	assert(argv[#argv - 2] == "bin", "bin is the second-to-last type")
+	assert(argv[#argv] == "tmp", "tmp is the last type")
 end)
 
 check("argv uses current CLI flags only", function()
@@ -174,6 +178,10 @@ check("argv carries an explicit repo dir and store root", function()
 		"note",
 		"--type",
 		"trace",
+		"--type",
+		"bin",
+		"--type",
+		"tmp",
 	})
 end)
 
@@ -226,15 +234,25 @@ end)
 
 -- ─── context_artifacts_view: grouping and ordering ────────────────────
 
-check("view groups by type in spec order: task, spec, plan, note, trace", function()
+check("view groups by type: task, spec, plan, note, trace, bin, tmp", function()
 	local view = core.context_artifacts_view({
+		artifact("tmp", "scratch.diff"),
+		artifact("bin", "run.sh"),
 		artifact("trace", "t.md", "Trace one"),
 		artifact("note", "n.md", "Note one"),
 		artifact("plan", "p.md", "Plan one"),
 		artifact("spec", "s.md", "Spec one"),
 		artifact("task", "k.md", "Task one"),
 	})
-	assert_order(view, { "Task one", "Spec one", "Plan one", "Note one", "Trace one" })
+	assert_order(view, {
+		"Task one",
+		"Spec one",
+		"Plan one",
+		"Note one",
+		"Trace one",
+		"run.sh",
+		"scratch.diff",
+	})
 end)
 
 check("view sorts alphabetically by displayed title inside a group", function()
@@ -327,13 +345,27 @@ check("view includes tasks regardless of status", function()
 	assert_order(view, { "Inbox task", "Closed task", "Complete task" })
 end)
 
-check("view drops the deferred bin/tmp types", function()
+check("view keeps bin and tmp, listed after the markdown groups", function()
 	local view = core.context_artifacts_view({
 		artifact("bin", "state.json", "Binary"),
 		artifact("tmp", "scratch.md", "Scratch"),
 		artifact("task", "k.md", "Task one"),
 	})
-	assert_order(view, { "Task one" })
+	assert_order(view, { "Task one", "Binary", "Scratch" })
+end)
+
+check("view orders tmp rows by the stamp parsed from the group directory", function()
+	-- tmp rows carry no frontmatter, so the ONLY ordering key is the
+	-- nanosecond stamp in the group directory. Newest first, undated last.
+	local older = artifact("tmp", "1789300000853051953-d8dc048d49/older.json")
+	local newer = artifact("tmp", "1789366283853051953-d8dc048d49/newer.json")
+	local undated = artifact("tmp", "legacy.diff")
+	local view = core.context_artifacts_view({ undated, older, newer })
+	assert_order(view, {
+		"1789366283853051953-d8dc048d49/newer.json",
+		"1789300000853051953-d8dc048d49/older.json",
+		"legacy.diff",
+	})
 end)
 
 check("view drops unknown types and malformed rows", function()
@@ -398,6 +430,145 @@ check("active_context_decision notifies when context is unset or empty", functio
 		assert(d.action == "notify", string.format("%s: expected action=notify, got %s", c.name, tostring(d.action)))
 		assert(type(d.message) == "string" and d.message ~= "", string.format("%s: notify needs a message", c.name))
 	end
+end)
+
+-- ─── status_scope ─────────────────────────────────────────────────────
+-- The scope half of `cue status --json`, read on its own. The ACTIVE
+-- CONTEXT is deliberately not consulted: scope is a property of the
+-- repository the query was aimed at (`-C`), so it is valid even when the
+-- branch has no context, and the browsed context is whatever the caller
+-- asked for.
+
+check("status_scope reads the scope field, never the context", function()
+	local status = {
+		scope = "palekiwi/palekiwi",
+		context = "cue-platform-direction",
+		address = "palekiwi/palekiwi/cue-platform-direction",
+		store = "/home/pl/cue",
+	}
+	assert(core.status_scope(status) == "palekiwi/palekiwi", "expected the scope field")
+end)
+
+check("status_scope is independent of the active context", function()
+	-- A repository with no active context still has a scope: the address of
+	-- an artifact browsed there must not depend on the branch association.
+	assert(core.status_scope({ scope = "palekiwi-labs/cue" }) == "palekiwi-labs/cue", "scope without a context")
+	assert(core.status_scope({ scope = "palekiwi-labs/cue", context = vim.NIL }) == "palekiwi-labs/cue", "null context")
+end)
+
+check("status_scope trims and rejects unusable values", function()
+	assert(core.status_scope({ scope = "  palekiwi/palekiwi \n" }) == "palekiwi/palekiwi", "scope is trimmed")
+	assert(core.status_scope(nil) == nil, "no status, no scope")
+	assert(core.status_scope({}) == nil, "no scope field")
+	assert(core.status_scope({ scope = "" }) == nil, "empty scope")
+	assert(core.status_scope({ scope = "   " }) == nil, "blank scope")
+	assert(core.status_scope({ scope = vim.NIL }) == nil, "JSON null scope")
+	assert(core.status_scope({ scope = 7 }) == nil, "non-string scope")
+	assert(core.status_scope("palekiwi/palekiwi") == nil, "a bare string is not a status table")
+end)
+
+-- ─── artifact_address ─────────────────────────────────────────────────
+-- The canonical address of an artifact: <scope>/<context>/<type>/<name>,
+-- the same form cue writes into `parent:` and `refs:` frontmatter. It is
+-- store-relative BY CONSTRUCTION: nothing here ever sees the store root or
+-- the absolute path, so a store path cannot leak into the value.
+
+check("artifact_address composes scope, context, type and name", function()
+	local a = artifact("spec", "index.md", "Spec")
+	assert(
+		core.artifact_address("palekiwi/palekiwi", a) == "palekiwi/palekiwi/demo/spec/index.md",
+		"expected the canonical address, got " .. tostring(core.artifact_address("palekiwi/palekiwi", a))
+	)
+end)
+
+check("artifact_address keeps the grouped tmp directory in the name", function()
+	-- `cue list --json` reports a tmp row's name WITH its group directory
+	-- (`<nanosecond timestamp>-<short commit hash>/<file>`), and the group
+	-- is part of the address: without it the address names no file.
+	local grouped = artifact("tmp", "1789366283853051953-d8dc048d49/review-comments-delta.json")
+	assert(
+		core.artifact_address("palekiwi/palekiwi", grouped)
+			== "palekiwi/palekiwi/demo/tmp/1789366283853051953-d8dc048d49/review-comments-delta.json",
+		"the tmp group directory belongs in the address"
+	)
+end)
+
+check("artifact_address handles bin rows, which carry no frontmatter", function()
+	assert(
+		core.artifact_address("palekiwi/palekiwi", artifact("bin", "run.sh")) == "palekiwi/palekiwi/demo/bin/run.sh",
+		"bin rows address the same way"
+	)
+end)
+
+check("artifact_address uses the scope it is given, not the current repo", function()
+	-- Browsing another repository's scope (`opts.dir`) must yield THAT
+	-- scope's address; the picker resolves the scope from a status query
+	-- aimed at the same directory.
+	local a = artifact("plan", "index.md", "Plan")
+	assert(
+		core.artifact_address("palekiwi-labs/cue", a) == "palekiwi-labs/cue/demo/plan/index.md",
+		"the supplied scope wins"
+	)
+end)
+
+check("artifact_address falls back to the queried context slug", function()
+	local a = { type = "note", name = "idea.md" }
+	assert(
+		core.artifact_address("palekiwi/palekiwi", a, "demo") == "palekiwi/palekiwi/demo/note/idea.md",
+		"a row without a context uses the context the picker queried"
+	)
+	local rowed = { type = "note", name = "idea.md", context = "row-context" }
+	assert(
+		core.artifact_address("palekiwi/palekiwi", rowed, "demo") == "palekiwi/palekiwi/row-context/note/idea.md",
+		"the row's own context wins over the fallback"
+	)
+end)
+
+check("artifact_address yields nil rather than a partial address", function()
+	local a = artifact("spec", "index.md", "Spec")
+	local cases = {
+		{ name = "no scope", scope = nil, artifact = a },
+		{ name = "blank scope", scope = "   ", artifact = a },
+		{ name = "JSON null scope", scope = vim.NIL, artifact = a },
+		{ name = "non-string scope", scope = 7, artifact = a },
+		{ name = "no artifact", scope = "s/s", artifact = nil },
+		{ name = "non-table artifact", scope = "s/s", artifact = "spec/index.md" },
+		{ name = "no context", scope = "s/s", artifact = { type = "spec", name = "index.md" } },
+		{ name = "no type", scope = "s/s", artifact = { context = "demo", name = "index.md" } },
+		{ name = "no name", scope = "s/s", artifact = { context = "demo", type = "spec" } },
+		{ name = "blank name", scope = "s/s", artifact = { context = "demo", type = "spec", name = "  " } },
+	}
+	for _, c in ipairs(cases) do
+		assert(
+			core.artifact_address(c.scope, c.artifact) == nil,
+			string.format("%s: expected nil, got %s", c.name, tostring(core.artifact_address(c.scope, c.artifact)))
+		)
+	end
+end)
+
+check("artifact_address never emits an absolute path", function()
+	-- The row's `path` is the absolute store path. It is not an input here,
+	-- and an absolute-looking name is refused rather than concatenated into
+	-- an address with a `//` in it.
+	local absolute = {
+		context = "demo",
+		type = "spec",
+		name = "/home/pl/cue/palekiwi/palekiwi/demo/spec/index.md",
+		path = "/home/pl/cue/palekiwi/palekiwi/demo/spec/index.md",
+	}
+	assert(core.artifact_address("palekiwi/palekiwi", absolute) == nil, "an absolute name is not an address")
+
+	local address = core.artifact_address("palekiwi/palekiwi", artifact("spec", "index.md", "Spec"))
+	assert(address:sub(1, 1) ~= "/", "an address is store-relative")
+	assert(not address:find("//", 1, true), "an address has no doubled separator")
+end)
+
+check("artifact_address normalises stray separators on the scope", function()
+	local a = artifact("spec", "index.md", "Spec")
+	assert(
+		core.artifact_address("palekiwi/palekiwi/", a) == "palekiwi/palekiwi/demo/spec/index.md",
+		"a trailing slash on the scope is dropped"
+	)
 end)
 
 if failures == 0 then

@@ -44,11 +44,16 @@ M.SLUG_TYPES = {
 }
 
 -- Artifact types listed by the context artifact picker, in display order
--- (cue-nvim-workflow spec §8): tasks, specs, plans, notes, traces. The list
--- is both the CLI type filter (one `--type` flag per entry) and the group
--- ordering. `bin` and `tmp` are DEFERRED, not permanently excluded -- adding
--- them here is the only change their inclusion needs.
-M.CONTEXT_ARTIFACT_TYPES = { "task", "spec", "plan", "note", "trace" }
+-- (cue-nvim-workflow spec §8): tasks, specs, plans, notes, traces, then the
+-- non-markdown bin and tmp. The list is both the CLI type filter (one
+-- `--type` flag per entry) and the group ordering.
+--
+-- bin/tmp are APPENDED rather than interleaved. They carry no frontmatter at
+-- all -- `cue add` refuses metadata for both -- so they have no status, no
+-- priority and no title, and sorting them among the narrative artifacts
+-- would put unlabelled rows in the middle of the list. Kept last, the
+-- markdown groups read exactly as they did before they were included.
+M.CONTEXT_ARTIFACT_TYPES = { "task", "spec", "plan", "note", "trace", "bin", "tmp" }
 
 -- Group rank derived from CONTEXT_ARTIFACT_TYPES. Doubles as the membership
 -- test for the picker: a type absent from this table is not listed.
@@ -113,6 +118,15 @@ M.MARKER_GLYPH = {
   ["*"] = "\xEF\x80\x85",
   ["!"] = "\xEF\x80\xA1",
 }
+
+-- Nerd Font glyph for the context browser's pin marker (single-width).
+--   U+F08D nf-fa-thumb_tack, UTF-8 EF 82 8D
+--
+-- A Nerd Font private-use codepoint, NOT an emoji: emoji are double-width
+-- (and width-unstable across terminals), which would shear the aligned
+-- columns the browser renders, and they inherit their own colour instead of
+-- the row's highlight group.
+M.PIN_GLYPH = "\xEF\x82\x8D"
 
 M.priority_highlights = {
   critical = "CuePriorityCritical",

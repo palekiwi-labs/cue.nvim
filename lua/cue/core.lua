@@ -111,13 +111,77 @@ function M.active_context_path(status)
   return (store:gsub("/+$", "")) .. "/" .. address .. "/context.md"
 end
 
+--- The repository scope reported by `cue status --json`, e.g.
+--- `palekiwi/palekiwi`.
+---
+--- Scope is a property of the REPOSITORY the query was aimed at (`-C`),
+--- derived by cue from its origin remote, not of the branch's context
+--- association. Reading it here therefore says nothing about which context
+--- is active: `status.context` is deliberately never consulted, so a
+--- repository with no active context still yields a scope, and browsing an
+--- explicit context cannot be confused with the active one.
+---
+--- It is also the only reliable source. `cue list --json` rows carry
+--- path/name/context/type/frontmatter and no scope, and the alternatives --
+--- guessing from the cwd, or splitting the absolute path into org/repo --
+--- are wrong the moment `opts.dir` or `opts.store` points elsewhere.
+---@param status table|nil  decoded `cue status --json` output
+---@return string|nil
+function M.status_scope(status)
+  if type(status) ~= "table" or status == vim.NIL then
+    return nil
+  end
+  return text_field(status.scope)
+end
+
+--- The canonical address of an artifact: `<scope>/<context>/<type>/<name>`.
+---
+--- This is the form cue itself uses in `parent:` and `refs:` frontmatter and
+--- accepts on the command line, and it is STORE-RELATIVE: the store root is
+--- not an input here, so an absolute path cannot leak into the value even
+--- when the row's own `path` is absolute.
+---
+--- `name` is used verbatim, which is what carries a grouped `tmp` artifact's
+--- directory (`<nanosecond timestamp>-<short commit hash>/<file>`) into the
+--- address. Without it the address would name a directory rather than a
+--- file. An absolute `name` is refused rather than concatenated: that would
+--- produce a doubled separator and an address pointing nowhere.
+---
+--- Every component must be present. A missing one yields nil rather than a
+--- partial address, because a partial address is not merely useless -- it
+--- silently names a DIFFERENT artifact when pasted.
+---@param scope string|nil             repository scope (see status_scope)
+---@param artifact table|nil           a `cue list --json` row
+---@param fallback_context string|nil  context the picker queried, used only
+---                                    when the row carries none
+---@return string|nil
+function M.artifact_address(scope, artifact, fallback_context)
+  local repo = text_field(scope)
+  if not repo or type(artifact) ~= "table" or artifact == vim.NIL then
+    return nil
+  end
+  repo = repo:gsub("/+$", "")
+
+  local context = text_field(artifact.context) or text_field(fallback_context)
+  local cue_type = text_field(artifact.type)
+  local name = text_field(artifact.name)
+  if repo == "" or not context or not cue_type or not name then
+    return nil
+  end
+  if name:sub(1, 1) == "/" then
+    return nil
+  end
+
+  return table.concat({ repo, context, cue_type, name }, "/")
+end
+
 --- Build the `cue list` argv for ONE explicit context.
 ---
 --- Emits the current CLI surface only: `--context` for the scope, `-C` for an
 --- alternate repository directory and `--store` for an alternate store root
---- (both optional), plus one `--type` flag per approved group. Requesting the
---- types explicitly keeps the deferred `bin`/`tmp` artifacts out of the
---- payload rather than filtering them after the fact.
+--- (both optional), plus one `--type` flag per listed group. Requesting the
+--- types explicitly keeps any type the picker does not render out of the
+--- payload rather than filtering it after the fact.
 ---
 --- Returns nil when no explicit context was supplied: without `--context`,
 --- `cue list` resolves the ACTIVE context, which this picker must never do.
@@ -183,12 +247,90 @@ function M.artifact_finished(artifact)
   return status == "complete" or status == "closed"
 end
 
-local function artifact_created_at(artifact)
-  local value = artifact_frontmatter(artifact).created_at
-  if type(value) ~= "number" or value ~= value or value == math.huge or value < 0 then
-    return -1
+--- Unix seconds parsed out of a `tmp` group directory name.
+---
+--- `cue add --type tmp` refuses metadata, so a tmp artifact has no
+--- frontmatter and therefore no `created_at`. What it does have is the
+--- directory cue groups it under: `<nanosecond timestamp>-<short commit
+--- hash>` (see `write_tmp` in cue's add module), which `cue list --json`
+--- reports as a path prefix on `name`, e.g.
+--- `1789366283853051953-d8dc048d49/review-comments-delta.json`.
+---
+--- The seconds are taken as the LEADING TEN DIGITS, never by dividing:
+--- 1789366283853051953 is far past 2^53, so `tonumber` cannot represent it
+--- exactly and arithmetic on it is approximate. String truncation is exact.
+---
+--- That also supplies the validation. A nanosecond Unix stamp is exactly 19
+--- digits from 2001 to 2286, and its leading ten digits are the Unix second.
+--- Requiring 19 digits with no leading zero therefore rejects a stamp in the
+--- wrong unit, a truncated stamp, and an ordinary directory that merely
+--- looks numeric. Anything rejected reports nothing, and the row renders a
+--- dash: the filesystem mtime is deliberately NOT a fallback, because it
+--- records when the file was last written, not when the group was created.
+---@param name string|nil  the `name` field of a tmp row
+---@return number|nil  Unix seconds, or nil when the name carries no stamp
+local function tmp_group_created_at(name)
+  if type(name) ~= "string" then
+    return nil
   end
-  return value
+  local group = name:match("^([^/]+)/")
+  if not group then
+    return nil
+  end
+  local digits, hash = group:match("^(%d+)%-(%x+)$")
+  if not digits or not hash then
+    return nil
+  end
+  if #digits ~= 19 or digits:sub(1, 1) == "0" then
+    return nil
+  end
+  return tonumber(digits:sub(1, 10))
+end
+
+--- When an artifact was created, in Unix seconds, or nil when unknown.
+---
+--- Markdown artifacts carry `created_at` in their frontmatter. `tmp`
+--- artifacts carry none, so their stamp is derived from the group directory
+--- (see tmp_group_created_at); pre-grouping flat tmp files and every `bin`
+--- artifact have no stamp anywhere and report nil.
+---
+--- The derivation is restricted to `tmp` because only tmp is laid out as
+--- `<group>/<file>`. Elsewhere a nested path component is a caller-chosen
+--- directory name, and reading a timestamp out of it would be a guess.
+---@param artifact table|nil  a `cue list --json --frontmatter` row
+---@return number|nil
+function M.artifact_created_at(artifact)
+  if type(artifact) ~= "table" or artifact == vim.NIL then
+    return nil
+  end
+  local value = artifact_frontmatter(artifact).created_at
+  if type(value) == "number" and value == value and value ~= math.huge and value >= 0 then
+    return value
+  end
+  if artifact.type == "tmp" then
+    return tmp_group_created_at(artifact.name)
+  end
+  return nil
+end
+
+--- The creation stamp as a display cell: the compact relative age the
+--- context browser already uses (`now`, `12m`, `3h`, `6d`, `1y`), or an em
+--- dash when the artifact has no usable stamp.
+---
+--- Relative, not absolute: "3d" answers the question the column is scanned
+--- for (how stale is this artifact) in four cells, where the absolute
+--- `YYYY-MM-DD HH:MM` it replaces spent sixteen -- twelve cells the title
+--- now has instead. It is the SAME formatter as the activity column
+--- (M.relative_age), so the two pickers cannot drift into two styles.
+---
+--- `now` is a parameter rather than a clock read, so a picker samples it
+--- once per load or refresh instead of once per rendered row, and the
+--- formatting is deterministic under test.
+---@param artifact table|nil
+---@param now number  Unix seconds, sampled by the caller
+---@return string
+function M.artifact_created_age(artifact, now)
+  return M.relative_age(M.artifact_created_at(artifact), now)
 end
 
 --- Comparator: type group, unfinished before finished, newest created_at
@@ -211,7 +353,12 @@ function M.context_artifact_less(a, b)
 
   local a_finished, b_finished = M.artifact_finished(a), M.artifact_finished(b)
   if a_finished ~= b_finished then return not a_finished end
-  local a_created, b_created = artifact_created_at(a), artifact_created_at(b)
+  -- The same stamp the creation column renders, so the column and the
+  -- ordering never disagree. Undated rows sort last (-1 is below every real
+  -- Unix second), which is what puts a flat legacy tmp file under the
+  -- grouped ones.
+  local a_created = M.artifact_created_at(a) or -1
+  local b_created = M.artifact_created_at(b) or -1
   if a_created ~= b_created then return a_created > b_created end
 
   local a_title = M.artifact_display_title(a):lower()
@@ -229,9 +376,9 @@ function M.context_artifact_less(a, b)
   return (a.path or "") < (b.path or "")
 end
 
---- Turn a `cue list` payload into the picker's row list: keep the approved
---- artifact types (dropping the deferred bin/tmp and any unknown type), then
---- order them with context_artifact_less.
+--- Turn a `cue list` payload into the picker's row list: keep the listed
+--- artifact types (dropping any unknown or retired type), then order them
+--- with context_artifact_less.
 ---
 --- Tasks are kept whatever their status: the spec requires them in this list,
 --- so no status filtering happens here.
@@ -270,9 +417,19 @@ function M.context_display_title(ctx)
   return ctx.context or ""
 end
 
---- Format last log activity (Unix seconds), not context modification time.
---- `now` is explicit so formatting is deterministic and independently testable.
-function M.context_activity(timestamp, now)
+--- Compact relative age for a Unix-seconds stamp: `now`, `12m`, `3h`,
+--- `364d`, `1y` -- never more than four cells -- or an em dash when the
+--- stamp is missing or unusable.
+---
+--- The one relative-time style in the plugin. The context browser's
+--- activity column and the artifact browser's creation column both render
+--- through here, so a change of style lands in both at once and neither can
+--- drift. `now` is explicit so formatting is deterministic, independently
+--- testable, and sampled once per picker load rather than once per row.
+---@param timestamp number|nil  Unix seconds
+---@param now number            Unix seconds, sampled by the caller
+---@return string
+function M.relative_age(timestamp, now)
   if type(timestamp) ~= "number" or timestamp ~= timestamp
      or timestamp == math.huge or timestamp < 0 then
     return "—"
@@ -283,6 +440,13 @@ function M.context_activity(timestamp, now)
   if age < 86400 then return math.floor(age / 3600) .. "h" end
   if age < 31536000 then return math.floor(age / 86400) .. "d" end
   return math.floor(age / 31536000) .. "y"
+end
+
+--- Format last log activity (Unix seconds), not context modification time.
+--- A named view on M.relative_age: the column means "time since the last
+--- log entry", which the name records, while the formatting stays shared.
+function M.context_activity(timestamp, now)
+  return M.relative_age(timestamp, now)
 end
 
 --- Turn a decoded `cue context list --json` payload into the browser's rows
@@ -314,6 +478,55 @@ function M.context_list_view(contexts)
     end
   end
   return rows
+end
+
+--- Whether a `cue context list --json` row names the context that
+--- `cue status --json` reports as active.
+---
+--- Identity is the (scope, context) PAIR, never the slug alone. A slug is
+--- only unique within its scope, and the store-wide listing shows every
+--- scope at once, so a slug comparison would mark the wrong row active --
+--- and, worse, make the unpin guard refuse the wrong row.
+---
+--- Both halves of the pair must be nonempty strings on both sides. An
+--- absent, scopeless or contextless status means no context is active, which
+--- is an ordinary state (a branch with no association), not an error.
+---@param status table|nil  decoded `cue status --json` output
+---@param ctx table|nil     a `cue context list --json` row
+---@return boolean
+function M.context_is_active(status, ctx)
+  if type(status) ~= "table" or type(ctx) ~= "table" then
+    return false
+  end
+  local scope = text_field(status.scope)
+  local slug = text_field(status.context)
+  if not scope or not slug then
+    return false
+  end
+  return scope == ctx.scope and slug == ctx.context
+end
+
+--- The context browser's leading marker column: the pin tack, or one blank
+--- cell when the row is not pinned.
+---
+--- ONE indicator, not two. The active context used to take a `*` in a
+--- second cell, but activation is now carried by the title colour
+--- (CueMarkerActive in picker.pick_contexts), which is legible without
+--- spending a column and without competing with the tack. Active state is
+--- therefore not an argument here at all: the marker means pinned and
+--- nothing else.
+---
+--- Pin state is READ from the row. `cue context list --json` carries
+--- `pinned` on every row, which is what makes the marker possible without
+--- the forbidden client-side join of `context list` against `context pins`.
+---
+--- Only a boolean `true` counts: `vim.json.decode` yields vim.NIL for a JSON
+--- null and the string "true" is not a pin either, and neither must light
+--- the tack.
+---@param ctx table|nil  a `cue context list --json` row
+---@return string  exactly one display cell
+function M.context_pin_marker(ctx)
+  return (type(ctx) == "table" and ctx.pinned == true) and config.PIN_GLYPH or " "
 end
 
 --- Strip the file extension from an artifact name, yielding the task slug.

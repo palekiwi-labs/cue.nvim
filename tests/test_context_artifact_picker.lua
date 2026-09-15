@@ -8,11 +8,17 @@
 --     and the optional -C / --store passthrough.
 --   * No implicit scope: a missing context never falls back to the active
 --     context, so no CLI call is made at all.
---   * One searchable list in group order (task, spec, plan, note, trace),
---     alphabetical by displayed title inside a group.
---   * Rows show type + title with a filename fallback.
+--   * One searchable list in group order (task, spec, plan, note, trace,
+--     bin, tmp), alphabetical by displayed title inside a group.
+--   * Rows show type, a priority caret, the title (filename fallback) and
+--     the creation age, every column a fixed width: the title is 72 cells
+--     and the age follows it, so the age stays beside the title instead of
+--     drifting to the far edge of a near-fullscreen window.
 --   * File-content preview; Enter opens the file and does NOT activate the
 --     context (no `cue switch`); no creation actions are mapped.
+--   * The copy actions honor <Tab> multi-selection, as master's pickers
+--     did: every toggled row contributes, space-joined in ONE register
+--     write; the highlighted row alone is copied when nothing is toggled.
 --   * Empty and error cases notify instead of opening a picker.
 --
 -- Stubs the minimal `vim` global and the Telescope modules that
@@ -32,6 +38,8 @@ local function reset(opts)
 		edits = {}, -- every vim.cmd.edit() argument
 		escaped = {}, -- every vim.fn.fnameescape() argument
 		maps = {}, -- every attach_mappings map() binding
+		registers = {}, -- every vim.fn.setreg() call: { name, value }
+		multi = {}, -- the picker's multi-selection (<Tab> toggles)
 		picker_opts = nil,
 		found = false,
 		closed = 0,
@@ -76,12 +84,16 @@ vim.system = function(cmd, _)
 	}
 end
 
+-- Route the decode by the STDOUT the stub handed back, not by sniffing the
+-- payload's shape: a status payload need not mention a context (a branch
+-- with no association still has a scope), and the picker's whole point is
+-- to read the scope out of one.
 vim.json = {
 	decode = function(str)
 		if state.decode_error then
 			error("Expected value but found invalid token")
 		end
-		if type(str) == "string" and str:find('"context"', 1, true) then
+		if str == state.status_stdout or (type(str) == "string" and str:find('"scope"', 1, true)) then
 			return state.status_decoded or { context = "demo" }
 		end
 		return state.decoded
@@ -111,7 +123,9 @@ vim.fn = {
 	filereadable = function(_)
 		return 1
 	end,
-	setreg = function(_, _) end,
+	setreg = function(name, value)
+		table.insert(state.registers, { name = name, value = value })
+	end,
 	fnameescape = function(path)
 		table.insert(state.escaped, path)
 		return escaped_form(path)
@@ -184,15 +198,21 @@ package.preload["telescope.actions.state"] = function()
 			return state.selected
 		end,
 		get_current_picker = function(_)
-			return nil
+			return {
+				get_multi_selection = function()
+					return state.multi or {}
+				end,
+			}
 		end,
 	}
 end
 
 package.preload["telescope.pickers.entry_display"] = function()
 	return {
-		create = function(_)
-			-- Return the raw column list so tests can inspect the row.
+		create = function(opts)
+			-- Record the declared column layout, and return the raw column
+			-- list so tests can inspect the row.
+			state.columns = opts.items
 			return function(cols)
 				return cols
 			end
@@ -238,6 +258,17 @@ local function check(name, fn)
 	end
 end
 
+-- A real grouped tmp row name: `<nanosecond timestamp>-<short commit hash>`
+-- as the directory, then the file. Copied from a live `cue list` payload.
+local GROUPED_TMP_NAME = "1789366283853051953-d8dc048d49/review-comments-delta-1789366283.json"
+local GROUPED_TMP_SECONDS = 1789366283
+
+-- The task picker's Jira-style priority carets, restored here unchanged:
+-- U+F102 angle-double-up (critical) and U+F106 angle-up (high). normal and
+-- low render blank.
+local CARET_CRITICAL = "\239\132\130"
+local CARET_HIGH = "\239\132\134"
+
 local function artifact(cue_type, name, title)
 	local fm = nil
 	if title ~= nil then
@@ -263,8 +294,11 @@ local function fixture()
 		artifact("task", "context-artifact-picker.md", "Build the context artifact picker"),
 		artifact("task", "archived.md", "Archived task"),
 		artifact("trace", "handoff.md", "Session handoff"),
-		artifact("bin", "state.json", "Binary state"),
-		artifact("tmp", "scratch.md", "Scratch"),
+		-- bin and tmp arrive WITHOUT a frontmatter key: `cue add` refuses
+		-- metadata for both, so the picker only ever sees path/name/type.
+		artifact("bin", "run.sh"),
+		artifact("tmp", GROUPED_TMP_NAME),
+		artifact("tmp", "legacy.diff"),
 	}
 end
 
@@ -275,6 +309,10 @@ local function open_picker(context, opts, fixture_opts)
 		stdout = fixture_opts.stdout or "[json]",
 		exit_code = fixture_opts.exit_code,
 		decode_error = fixture_opts.decode_error,
+		status_exit_code = fixture_opts.status_exit_code,
+		status_stdout = fixture_opts.status_stdout or '{"scope":"palekiwi/palekiwi"}',
+		status_stderr = fixture_opts.status_stderr,
+		status_decoded = fixture_opts.status_decoded or { scope = "palekiwi/palekiwi" },
 	})
 	picker.pick_context_artifacts(context, opts)
 end
@@ -307,15 +345,24 @@ local function last_notify()
 	return state.notifies[#state.notifies]
 end
 
-check("complete and closed artifacts have grey badges and titles", function()
+check("complete and closed artifacts grey out every column", function()
 	for _, status in ipairs({ "complete", "closed" }) do
 		local item = artifact("plan", "finished.md", "Finished")
 		item.frontmatter.status = status
+		item.frontmatter.priority = "critical"
+		item.frontmatter.created_at = GROUPED_TMP_SECONDS
 		open_picker("demo", nil, { decoded = { item } })
 		local entry = state.picker_opts.finder.entry_maker(item)
 		local cells = entry:display()
-		assert(cells[1][2] == "CueStatusComplete")
-		assert(cells[2][2] == "CueStatusComplete")
+		assert(#cells == 4, status .. ": expected four columns, got " .. #cells)
+		for i = 1, 4 do
+			assert(
+				cells[i][2] == "CueStatusComplete",
+				string.format("%s: column %d = %q, expected CueStatusComplete", status, i, tostring(cells[i][2]))
+			)
+		end
+		-- The caret still renders; only its colour is overridden.
+		assert(cells[2][1] == CARET_CRITICAL, status .. ": the priority caret must survive dimming")
 	end
 end)
 
@@ -364,7 +411,7 @@ end)
 
 -- ─── ordering and membership ──────────────────────────────────────────
 
-check("lists one searchable list grouped task/spec/plan/note/trace", function()
+check("lists one searchable list grouped task/spec/plan/note/trace/bin/tmp", function()
 	open_picker("demo")
 	assert_order({
 		"Archived task",
@@ -374,15 +421,20 @@ check("lists one searchable list grouped task/spec/plan/note/trace", function()
 		"Zeta plan",
 		"grouped-artifact-browser.md",
 		"Session handoff",
+		"run.sh",
+		GROUPED_TMP_NAME,
+		"legacy.diff",
 	})
 end)
 
-check("excludes the deferred bin and tmp types", function()
+check("includes bin and tmp artifacts", function()
 	open_picker("demo")
+	local seen = {}
 	for _, a in ipairs(rows()) do
-		assert(a.type ~= "bin", "bin artifacts must not be listed")
-		assert(a.type ~= "tmp", "tmp artifacts must not be listed")
+		seen[a.type] = true
 	end
+	assert(seen.bin, "bin artifacts must be listed")
+	assert(seen.tmp, "tmp artifacts must be listed")
 end)
 
 check("includes tasks whatever their status", function()
@@ -418,12 +470,143 @@ check("rows show artifact type and title, with a filename fallback", function()
 	local titled = entry_maker(artifact("task", "context-artifact-picker.md", "Build the context artifact picker"))
 	local cols = titled.display(titled)
 	assert(cols[1][1] == "TASK", "expected the type badge, got " .. tostring(cols[1][1]))
-	assert(cols[2][1] == "Build the context artifact picker", "expected the title, got " .. tostring(cols[2][1]))
+	assert(cols[3][1] == "Build the context artifact picker", "expected the title, got " .. tostring(cols[3][1]))
 
 	local untitled = entry_maker(artifact("note", "grouped-artifact-browser.md"))
 	local fallback_cols = untitled.display(untitled)
 	assert(fallback_cols[1][1] == "NOTE", "expected the NOTE badge")
-	assert(fallback_cols[2][1] == "grouped-artifact-browser.md", "expected the filename fallback")
+	assert(fallback_cols[3][1] == "grouped-artifact-browser.md", "expected the filename fallback")
+end)
+
+check("columns are type, priority caret, title, creation age", function()
+	open_picker("demo")
+	local cols = state.columns
+	assert(type(cols) == "table", "the picker must declare a column layout")
+	assert(#cols == 4, "expected four columns, got " .. #cols)
+	assert(cols[1].width == 5, "the type badge is five cells (the longest badge is TRACE)")
+	assert(cols[2].width == 1, "the priority caret is a single cell")
+	assert(cols[4].width == 4, "the age column is four cells (the widest value is 364d)")
+	assert(cols[4].right_justify, "the age column is right justified against the results edge")
+	assert(not cols[4].remaining, "a remaining age column would drift with the title")
+end)
+
+check("the title is a fixed 72 cells", function()
+	open_picker("demo")
+	local width = state.columns[3].width
+	-- A fixed count, not a function: a flexible title on a 95% window
+	-- would push the age column to the far edge of a wide terminal. The
+	-- age therefore follows the title at a fixed offset instead.
+	assert(width == 72, "expected 72, got " .. tostring(width))
+end)
+
+check("the priority caret flags critical and high only", function()
+	open_picker("demo")
+	local entry_maker = state.picker_opts.finder.entry_maker
+	local function caret(priority)
+		local item = artifact("task", "k.md", "Task")
+		item.frontmatter.priority = priority
+		local entry = entry_maker(item)
+		return entry:display()[2]
+	end
+
+	local critical = caret("critical")
+	assert(critical[1] == CARET_CRITICAL, "critical must render the double caret")
+	assert(critical[2] == "CuePriorityCritical", "critical caret is red")
+
+	local high = caret("high")
+	assert(high[1] == CARET_HIGH, "high must render the single caret")
+	assert(high[2] == "CuePriorityHigh", "high caret is orange")
+
+	-- normal is the norm and low is rare clutter: both stay blank, so the
+	-- caret column reads as a flag rather than a fourth colour.
+	for _, priority in ipairs({ "normal", "low", "bogus", "" }) do
+		assert(caret(priority)[1] == "", priority .. " must render blank")
+	end
+	assert(caret(nil)[1] == "", "a missing priority renders blank")
+	assert(caret(vim.NIL)[1] == "", "a vim.NIL priority renders blank")
+	assert(caret(3)[1] == "", "a non-string priority renders blank")
+end)
+
+check("the priority caret is case-insensitive", function()
+	open_picker("demo")
+	local item = artifact("task", "k.md", "Task")
+	item.frontmatter.priority = "CRITICAL"
+	local entry = state.picker_opts.finder.entry_maker(item)
+	assert(entry:display()[2][1] == CARET_CRITICAL, "priority matching ignores case")
+end)
+
+check("bin and tmp rows render a blank caret", function()
+	open_picker("demo")
+	local entry_maker = state.picker_opts.finder.entry_maker
+	for _, a in ipairs({ artifact("bin", "run.sh"), artifact("tmp", "legacy.diff") }) do
+		local entry = entry_maker(a)
+		local cells = entry:display()
+		assert(cells[2][1] == "", a.type .. " carries no frontmatter, so no caret")
+		assert(cells[1][1] == a.type:upper(), "expected the " .. a.type .. " badge")
+	end
+end)
+
+check("the creation column shows a compact relative age, dash when absent", function()
+	-- Sampled BEFORE the picker opens, so the picker's own clock sample is
+	-- never earlier than this one and an offset can only round upwards.
+	local before = os.time()
+	open_picker("demo")
+	local entry_maker = state.picker_opts.finder.entry_maker
+
+	local function age(seconds_ago)
+		local dated = artifact("task", "k.md", "Task")
+		dated.frontmatter.created_at = before - seconds_ago
+		return entry_maker(dated):display()[4][1]
+	end
+
+	assert(age(30) == "now", "under a minute reads now, got " .. age(30))
+	assert(age(600) == "10m", "ten minutes reads 10m, got " .. age(600))
+	assert(age(7200) == "2h", "two hours reads 2h, got " .. age(7200))
+	assert(age(86400 * 3) == "3d", "three days reads 3d, got " .. age(86400 * 3))
+	assert(age(86400 * 400) == "1y", "past a year reads 1y, got " .. age(86400 * 400))
+
+	-- tmp has no frontmatter at all: the stamp is parsed out of the group
+	-- directory cue names `<nanosecond timestamp>-<short commit hash>`, and
+	-- that extraction still feeds the column.
+	local grouped = artifact("tmp", GROUPED_TMP_NAME)
+	assert(entry_maker(grouped):display()[4][1] ~= "—", "the tmp group directory drives the column")
+
+	-- A legacy flat tmp file and a bin script have no stamp anywhere, and
+	-- the filesystem mtime is NOT a fallback.
+	assert(entry_maker(artifact("tmp", "legacy.diff")):display()[4][1] == "—", "undated tmp shows a dash")
+	assert(entry_maker(artifact("bin", "run.sh")):display()[4][1] == "—", "bin shows a dash")
+
+	local undated = artifact("note", "n.md", "Note")
+	assert(entry_maker(undated):display()[4][1] == "—", "a missing created_at shows a dash")
+end)
+
+check("the age column is sampled once per picker, not once per row", function()
+	local real_time = os.time
+	local calls = 0
+	os.time = function(...) -- luacheck: ignore
+		calls = calls + 1
+		return real_time(...)
+	end
+	local ok, err = pcall(function()
+		open_picker("demo")
+		local sampled = calls
+		assert(sampled == 1, "opening the picker must sample the clock once, got " .. sampled)
+		local entry_maker = state.picker_opts.finder.entry_maker
+		for _, a in ipairs(fixture()) do
+			entry_maker(a):display()
+		end
+		assert(calls == sampled, "rendering rows must reuse the sampled clock, got " .. calls)
+	end)
+	os.time = real_time -- luacheck: ignore
+	assert(ok, err)
+end)
+
+check("the creation column is muted", function()
+	open_picker("demo")
+	local dated = artifact("task", "k.md", "Task")
+	dated.frontmatter.created_at = GROUPED_TMP_SECONDS
+	local cells = state.picker_opts.finder.entry_maker(dated):display()
+	assert(cells[4][2] == "TelescopeResultsComment", "creation age is metadata, not content")
 end)
 
 check("rows carry the file path and a searchable ordinal", function()
@@ -445,6 +628,24 @@ check("entry maker skips rows without a path", function()
 end)
 
 -- ─── preview and actions ──────────────────────────────────────────────
+
+check("keeps the preview below the results, prompt on top", function()
+	open_picker("demo")
+	assert(state.picker_opts.layout_strategy == "vertical", "the preview sits below the results")
+	local layout = state.picker_opts.layout_config
+	assert(layout.mirror == true, "mirror puts the preview below rather than above")
+	assert(layout.prompt_position == "top")
+	assert(layout.preview_height == 0.5, "the preview takes half the height")
+end)
+
+check("takes 95% of the editor width", function()
+	open_picker("demo")
+	local width = state.picker_opts.layout_config.width
+	-- Telescope resolves a layout width below 1 as a share of the editor
+	-- (telescope.config.resolve.resolve_width), so the plain number is the
+	-- percentage: a near-fullscreen window, as before the columns changed.
+	assert(width == 0.95, "expected 0.95, got " .. tostring(width))
+end)
 
 check("previews the selected file's contents", function()
 	open_picker("demo")
@@ -505,7 +706,334 @@ end)
 check("maps no creation or activation actions", function()
 	open_picker("demo")
 	local maps = attach()
-	assert(#maps == 0, "the artifact picker must map no extra actions, got " .. #maps)
+	-- Copying is a read: the only extra bindings are the two yank actions,
+	-- in insert and normal mode. Nothing creates, switches or pins.
+	for _, m in ipairs(maps) do
+		assert(m.lhs == "<C-y>" or m.lhs == "<C-h>", "unexpected binding " .. m.lhs)
+	end
+	assert(#maps == 4, "expected only the two copy bindings in two modes, got " .. #maps)
+end)
+
+-- ─── copying the path and the canonical address ───────────────────────
+
+-- Find the handler registered for `lhs` in `mode` (default insert).
+local function binding(lhs, mode)
+	for _, m in ipairs(state.maps) do
+		if m.lhs == lhs and m.mode == (mode or "i") then
+			return m.rhs
+		end
+	end
+	return nil
+end
+
+local function copied()
+	assert(#state.registers <= 1, "a copy writes exactly one register, got " .. #state.registers)
+	return state.registers[1]
+end
+
+local function status_calls()
+	local n = 0
+	for _, argv in ipairs(state.commands) do
+		if argv[2] == "status" then
+			n = n + 1
+		end
+	end
+	return n
+end
+
+check("binds the copy actions in insert and normal mode", function()
+	open_picker("demo")
+	attach()
+	for _, mode in ipairs({ "i", "n" }) do
+		assert(binding("<C-y>", mode), "<C-y> must be bound in " .. mode .. " mode")
+		assert(binding("<C-h>", mode), "<C-h> must be bound in " .. mode .. " mode")
+	end
+end)
+
+check("C-y copies the absolute file path to the system clipboard", function()
+	open_picker("demo")
+	attach()
+	local path = "/home/pl/cue/palekiwi/palekiwi/demo/spec/index.md"
+	state.selected = { path = path, value = artifact("spec", "index.md", "Spec") }
+	binding("<C-y>")()
+
+	local reg = copied()
+	assert(reg, "<C-y> must write a register")
+	assert(reg.name == "+", "the system clipboard is register +, got " .. tostring(reg.name))
+	assert(reg.value == path, "expected the absolute path, got " .. tostring(reg.value))
+	assert(last_notify() and last_notify().message:find(path, 1, true), "the notification names the copied value")
+	assert(state.closed == 0, "copying keeps the picker open")
+	assert(#state.edits == 0, "copying opens nothing")
+end)
+
+check("C-y needs no scope query", function()
+	open_picker("demo")
+	attach()
+	state.selected = { path = "/home/pl/cue/palekiwi/palekiwi/demo/spec/index.md" }
+	local before = #state.commands
+	binding("<C-y>")()
+	assert(#state.commands == before, "the path is already on the entry; no CLI call")
+end)
+
+check("C-h copies the canonical address, not the store path", function()
+	open_picker("demo")
+	attach()
+	local a = artifact("spec", "index.md", "Spec")
+	state.selected = { path = a.path, value = a }
+	binding("<C-h>")()
+
+	local reg = copied()
+	assert(reg, "<C-h> must write a register")
+	assert(reg.name == "+", "the system clipboard is register +")
+	assert(
+		reg.value == "palekiwi/palekiwi/demo/spec/index.md",
+		"expected the canonical address, got " .. tostring(reg.value)
+	)
+	assert(reg.value:sub(1, 1) ~= "/", "an address is never an absolute path")
+	assert(not reg.value:find("/home/pl/cue", 1, true), "the store root must not leak into the address")
+	assert(state.closed == 0, "copying keeps the picker open")
+end)
+
+check("C-h resolves the scope with a status query aimed at the same repo", function()
+	open_picker("demo", { dir = "/repo", store = "/store" })
+	attach()
+	state.selected = { value = artifact("note", "idea.md") }
+	binding("<C-h>")()
+
+	local status = nil
+	for _, argv in ipairs(state.commands) do
+		if argv[2] == "status" then
+			status = table.concat(argv, " ")
+		end
+	end
+	assert(status, "<C-h> must resolve the scope from cue status")
+	assert(status:find("-C /repo", 1, true), "status must be aimed at the queried dir: " .. status)
+	assert(status:find("--store /store", 1, true), "status must use the queried store: " .. status)
+	assert(status:find("--json", 1, true), "status must be asked for JSON")
+end)
+
+check("C-h uses the queried repository's scope, not the current one", function()
+	-- Browsing another repository (`opts.dir`) must address its artifacts in
+	-- THAT repository's scope. The scope comes from the status query the
+	-- picker aimed at the same directory, never from the cwd or from
+	-- splitting the artifact path.
+	open_picker("demo", { dir = "/other" }, {
+		status_stdout = '{"scope":"palekiwi-labs/cue","context":null}',
+		status_decoded = { scope = "palekiwi-labs/cue", context = vim.NIL },
+	})
+	attach()
+	state.selected = { value = artifact("plan", "index.md", "Plan") }
+	binding("<C-h>")()
+	assert(copied().value == "palekiwi-labs/cue/demo/plan/index.md", "got " .. tostring(copied().value))
+end)
+
+check("C-h is unaffected by which context is active", function()
+	-- The active context is a different context entirely (the picker browses
+	-- an explicit one), and the address must name the BROWSED context.
+	open_picker("demo", nil, {
+		status_stdout = '{"scope":"palekiwi/palekiwi","context":"cue-platform-direction"}',
+		status_decoded = { scope = "palekiwi/palekiwi", context = "cue-platform-direction" },
+	})
+	attach()
+	state.selected = { value = artifact("task", "widen-picker.md", "Widen the picker") }
+	binding("<C-h>")()
+	assert(copied().value == "palekiwi/palekiwi/demo/task/widen-picker.md", "got " .. tostring(copied().value))
+end)
+
+check("C-h addresses a grouped tmp artifact through its group directory", function()
+	open_picker("demo")
+	attach()
+	state.selected = { value = artifact("tmp", GROUPED_TMP_NAME) }
+	binding("<C-h>")()
+	assert(
+		copied().value == "palekiwi/palekiwi/demo/tmp/" .. GROUPED_TMP_NAME,
+		"the tmp group directory belongs in the address, got " .. tostring(copied().value)
+	)
+end)
+
+check("C-h addresses a bin artifact", function()
+	open_picker("demo")
+	attach()
+	state.selected = { value = artifact("bin", "run.sh") }
+	binding("<C-h>")()
+	assert(copied().value == "palekiwi/palekiwi/demo/bin/run.sh", "got " .. tostring(copied().value))
+end)
+
+check("C-h resolves the scope once per picker", function()
+	open_picker("demo")
+	attach()
+	state.selected = { value = artifact("spec", "index.md", "Spec") }
+	binding("<C-h>")()
+	local after_first = status_calls()
+	assert(after_first == 1, "the first copy resolves the scope, got " .. after_first)
+	state.registers = {}
+	binding("<C-h>", "n")()
+	assert(status_calls() == after_first, "a second copy must reuse the resolved scope")
+	assert(copied().value == "palekiwi/palekiwi/demo/spec/index.md", "the memoised scope still addresses")
+end)
+
+check("C-h copies nothing when the scope cannot be resolved", function()
+	local cases = {
+		{
+			name = "status without a scope",
+			opts = { status_stdout = '{"context":"demo"}', status_decoded = { context = "demo" } },
+		},
+		{
+			name = "null scope",
+			opts = { status_stdout = '{"scope":null}', status_decoded = { scope = vim.NIL } },
+		},
+		{
+			name = "status command failure",
+			opts = { status_exit_code = 1, status_stderr = "not a git repository" },
+		},
+	}
+	for _, c in ipairs(cases) do
+		open_picker("demo", nil, c.opts)
+		attach()
+		state.selected = { path = "/home/pl/cue/x/demo/spec/index.md", value = artifact("spec", "index.md", "Spec") }
+		binding("<C-h>")()
+		assert(#state.registers == 0, c.name .. ": a bogus address must never be copied")
+		assert(last_notify() ~= nil, c.name .. ": the failure must be reported")
+		assert(last_notify().level == vim.log.levels.ERROR, c.name .. ": an unresolvable scope is an error")
+		assert(state.closed == 0, c.name .. ": a failed copy keeps the picker open")
+	end
+end)
+
+check("C-h copies nothing when the row lacks the fields an address needs", function()
+	open_picker("demo")
+	attach()
+	-- A row that somehow reached the picker without a type or name has no
+	-- address; the absolute path is NOT substituted for one.
+	state.selected = { path = "/home/pl/cue/palekiwi/palekiwi/demo/spec/index.md", value = { context = "demo" } }
+	binding("<C-h>")()
+	assert(#state.registers == 0, "an incomplete row must not be addressed")
+	assert(last_notify() ~= nil and last_notify().level == vim.log.levels.ERROR, "missing metadata is an error")
+end)
+
+check("both copy actions are no-ops without a selection", function()
+	for _, lhs in ipairs({ "<C-y>", "<C-h>" }) do
+		open_picker("demo")
+		attach()
+		state.selected = nil
+		binding(lhs)()
+		assert(#state.registers == 0, lhs .. " must copy nothing without a selection")
+		assert(state.closed == 0, lhs .. " must keep the picker open")
+		assert(last_notify() ~= nil, lhs .. " must say why nothing was copied")
+	end
+end)
+
+check("C-y copies nothing when the selection carries no path", function()
+	open_picker("demo")
+	attach()
+	state.selected = { value = { context = "demo", type = "spec", name = "index.md" } }
+	binding("<C-y>")()
+	assert(#state.registers == 0, "no path, no copy")
+	assert(last_notify() ~= nil, "the miss must be reported")
+end)
+
+-- ─── multi-selection copies ────────────────────────────────────────────
+
+-- The single-selection tests above all run with an EMPTY multi-selection,
+-- so together they already pin the fallback: nothing toggled means the
+-- highlighted row alone is copied. The tests here pin the toggled case.
+
+check("C-y copies every multi-selected path in one register write", function()
+	open_picker("demo")
+	attach()
+	local first = "/home/pl/cue/palekiwi/palekiwi/demo/spec/index.md"
+	local second = "/home/pl/cue/palekiwi/palekiwi/demo/task/multi.md"
+	-- The highlighted row must NOT contribute: a toggle selection replaces
+	-- it, exactly as master's copy did.
+	state.selected = { path = "/home/pl/cue/palekiwi/palekiwi/demo/note/highlighted.md" }
+	state.multi = {
+		{ path = first, value = artifact("spec", "index.md", "Spec") },
+		{ path = second, value = artifact("task", "multi.md") },
+	}
+	binding("<C-y>")()
+
+	local reg = copied()
+	assert(reg, "C-y must write a register")
+	assert(reg.name == "+", "the system clipboard is register +")
+	assert(reg.value == first .. " " .. second, "paths join space-separated, got " .. tostring(reg.value))
+	assert(not reg.value:find("highlighted", 1, true), "the merely highlighted row must not contribute")
+	assert(last_notify().message:find("2 items", 1, true), "the notification reports the count, not every value")
+	assert(state.closed == 0, "copying keeps the picker open")
+	assert(#state.edits == 0, "copying opens nothing")
+end)
+
+check("C-h copies every multi-selected address in one register write", function()
+	open_picker("demo")
+	attach()
+	state.selected = { value = artifact("note", "highlighted.md") }
+	state.multi = {
+		{ value = artifact("spec", "index.md", "Spec") },
+		{ value = artifact("task", "multi.md") },
+	}
+	binding("<C-h>")()
+
+	local reg = copied()
+	assert(reg, "C-h must write a register")
+	assert(
+		reg.value == "palekiwi/palekiwi/demo/spec/index.md palekiwi/palekiwi/demo/task/multi.md",
+		"addresses join space-separated, got " .. tostring(reg.value)
+	)
+	assert(not reg.value:find("highlighted", 1, true), "the merely highlighted row must not contribute")
+	assert(status_calls() == 1, "the scope resolves once for the whole batch, got " .. status_calls())
+	assert(state.closed == 0, "copying keeps the picker open")
+end)
+
+check("C-h skips multi entries that cannot be addressed", function()
+	open_picker("demo")
+	attach()
+	state.multi = {
+		{ value = artifact("spec", "index.md", "Spec") },
+		{ value = { context = "demo" } }, -- no type/name: no address
+	}
+	binding("<C-h>")()
+	assert(
+		copied().value == "palekiwi/palekiwi/demo/spec/index.md",
+		"one unaddressable row must not sink the addressable one"
+	)
+end)
+
+check("C-y skips multi entries without a path", function()
+	open_picker("demo")
+	attach()
+	state.multi = {
+		{ path = "/home/pl/cue/palekiwi/palekiwi/demo/spec/index.md" },
+		{ value = { context = "demo", type = "spec", name = "index.md" } },
+	}
+	binding("<C-y>")()
+	assert(
+		copied().value == "/home/pl/cue/palekiwi/palekiwi/demo/spec/index.md",
+		"one pathless row must not sink the pathed one"
+	)
+end)
+
+check("a multi copy where every entry is skipped reports and copies nothing", function()
+	open_picker("demo")
+	attach()
+	state.multi = { { value = { context = "demo" } } }
+	binding("<C-h>")()
+	assert(#state.registers == 0, "nothing addressable, nothing copied")
+	assert(last_notify() ~= nil and last_notify().level == vim.log.levels.WARN, "the miss is reported")
+	assert(state.closed == 0, "a failed copy keeps the picker open")
+end)
+
+check("multi C-h copies still resolve the scope once per picker", function()
+	open_picker("demo")
+	attach()
+	state.multi = { { value = artifact("spec", "index.md", "Spec") } }
+	binding("<C-h>")()
+	assert(status_calls() == 1, "the first copy resolves the scope")
+	state.registers = {}
+	state.multi = {
+		{ value = artifact("spec", "index.md", "Spec") },
+		{ value = artifact("task", "multi.md") },
+	}
+	binding("<C-h>", "n")()
+	assert(status_calls() == 1, "a second multi copy must reuse the resolved scope")
+	assert(#state.registers == 1, "one register write for the batch")
 end)
 
 -- ─── empty and error cases ────────────────────────────────────────────
@@ -517,12 +1045,12 @@ check("notifies instead of opening an empty picker", function()
 	assert(last_notify().message:find("demo", 1, true), "the notification should name the context")
 end)
 
-check("notifies when only deferred types are present", function()
+check("opens for a context holding only bin and tmp artifacts", function()
 	open_picker("demo", nil, {
-		decoded = { artifact("bin", "state.json", "Binary state"), artifact("tmp", "scratch.md", "Scratch") },
+		decoded = { artifact("bin", "run.sh"), artifact("tmp", "legacy.diff") },
 	})
-	assert(not state.picker_opts, "bin/tmp-only contexts must not open a picker")
-	assert(last_notify().level == vim.log.levels.INFO, "empty result is informational")
+	assert(state.picker_opts, "bin/tmp-only contexts must still open a picker")
+	assert(#rows() == 2, "both rows must be listed")
 end)
 
 check("notifies when the CLI call fails", function()

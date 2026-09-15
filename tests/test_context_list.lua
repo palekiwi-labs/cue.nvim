@@ -20,6 +20,18 @@
 --     on every row, so the old slug -> timestamp parameter has no source
 --     left to come from.
 --
+--   core.context_is_active(status, ctx)
+--     Identity comparison against `cue status --json`, on the
+--     (scope, context) PAIR. A bare slug does not identify a context once
+--     the store holds more than one scope.
+--
+--   core.context_pin_marker(ctx)
+--     The browser's leading width-1 column: the pin marker alone. Active
+--     is signalled by the title colour, not by a second glyph, so the
+--     column takes no status argument. `pinned` is a field on every
+--     `cue context list --json` row, so the marker is read, never joined
+--     client-side.
+--
 -- Mocks the minimal `vim` global so the real module can be required without
 -- a running Neovim instance.
 
@@ -139,6 +151,9 @@ check("refuses a limit that is not a positive integer", function()
 end)
 
 check("orders every flag ahead of -C and --store", function()
+	-- Flag and value stay on one line: the expected argv reads as the
+	-- command line it asserts, which a value-per-line expansion loses.
+	-- stylua: ignore
 	assert_argv(
 		core.list_contexts_argv({
 			json = true,
@@ -238,6 +253,7 @@ end)
 check("carries the fields the picker renders", function()
 	local row = ctx("auth", "Auth redesign")
 	row.last_logged_at = 1789123456
+	row.pinned = true
 	local rows = core.context_list_view({ row })
 	local got = rows[1]
 	assert(got.context == "auth", "slug not carried")
@@ -245,10 +261,81 @@ check("carries the fields the picker renders", function()
 	assert(got.scope == "palekiwi/palekiwi", "scope not carried")
 	assert(got.path == "/home/pl/cue/palekiwi/palekiwi/auth/context.md", "path not carried")
 	assert(got.last_logged_at == 1789123456, "last_logged_at not carried")
+	assert(got.pinned == true, "pinned not carried")
 end)
 
 check("no longer exposes a client-side comparator", function()
 	assert(core.context_less == nil, "cue context list --sort owns the ordering")
+end)
+
+-- ─── context_is_active ───────────────────────────────────────────────────────
+--
+-- Identity is the (scope, context) pair, never the slug alone. Two scopes
+-- may hold a context of the same name, and the store-wide listing shows both
+-- rows at once; matching on the slug would mark the wrong one active and,
+-- worse, let the unpin guard refuse the wrong row.
+
+check("matches the active context on the scope/context pair", function()
+	assert(core.context_is_active({ scope = "palekiwi/palekiwi", context = "auth" }, ctx("auth", "Auth")))
+end)
+
+check("does not match the same slug in another scope", function()
+	assert(not core.context_is_active({ scope = "other/repo", context = "auth" }, ctx("auth", "Auth")))
+end)
+
+check("does not match another slug in the same scope", function()
+	assert(not core.context_is_active({ scope = "palekiwi/palekiwi", context = "billing" }, ctx("auth", "Auth")))
+end)
+
+check("reports no active context for an unusable status", function()
+	local row = ctx("auth", "Auth")
+	assert(not core.context_is_active(nil, row))
+	assert(not core.context_is_active("not a table", row))
+	assert(not core.context_is_active({}, row))
+	assert(not core.context_is_active({ scope = "", context = "auth" }, row))
+	assert(not core.context_is_active({ scope = "palekiwi/palekiwi" }, row))
+	assert(not core.context_is_active({ scope = "palekiwi/palekiwi", context = vim.NIL }, row))
+end)
+
+check("reports no active context for a scopeless row", function()
+	local row = ctx("auth", "Auth")
+	row.scope = nil
+	assert(not core.context_is_active({ scope = "palekiwi/palekiwi", context = "auth" }, row))
+	assert(not core.context_is_active({ scope = "palekiwi/palekiwi", context = "auth" }, nil))
+end)
+
+-- ─── context_pin_marker ──────────────────────────────────────────────────────
+
+local TACK = "\239\130\141" -- U+F08D nf-fa-thumb_tack (EF 82 8D)
+
+check("uses the Nerd Font thumb tack, not an emoji", function()
+	local row = ctx("auth", "Auth")
+	row.pinned = true
+	local cell = core.context_pin_marker(row)
+	assert(cell == TACK, "expected U+F08D, got " .. cell)
+	assert(#TACK == 3, "a Nerd Font private-use glyph is 3 UTF-8 bytes; an emoji would be 4")
+end)
+
+check("the marker is exactly one cell and says nothing about activation", function()
+	-- The retired `*` is gone: an active context is signalled by the title
+	-- colour, which frees the glyph column to mean pinned and nothing else.
+	local row = ctx("auth", "Auth")
+	row.pinned = true
+	assert(core.context_pin_marker(row) == TACK, "a pinned row shows the tack")
+	row.pinned = false
+	assert(core.context_pin_marker(row) == " ", "an unpinned row shows one blank cell")
+end)
+
+check("renders a blank when the row is not pinned", function()
+	local row = ctx("auth", "Auth")
+	assert(core.context_pin_marker(row) == " ", "missing pinned field")
+	row.pinned = false
+	assert(core.context_pin_marker(row) == " ")
+	row.pinned = vim.NIL
+	assert(core.context_pin_marker(row) == " ", "a JSON null is not a pin")
+	row.pinned = "true"
+	assert(core.context_pin_marker(row) == " ", "only boolean true is a pin")
+	assert(core.context_pin_marker(nil) == " ")
 end)
 
 if failures == 0 then
