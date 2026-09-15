@@ -20,37 +20,37 @@ local function check(name, fn)
 end
 
 local function assert_list_equal(actual, expected)
-  if #actual ~= #expected then
-    error(string.format("list length mismatch: expected %d, got %d", #expected, #actual))
-  end
-  for i = 1, #expected do
-    if actual[i] ~= expected[i] then
-      error(string.format("list mismatch at index %d: expected %q, got %q", i, expected[i], actual[i]))
-    end
-  end
+	if #actual ~= #expected then
+		error(string.format("list length mismatch: expected %d, got %d", #expected, #actual))
+	end
+	for i = 1, #expected do
+		if actual[i] ~= expected[i] then
+			error(string.format("list mismatch at index %d: expected %q, got %q", i, expected[i], actual[i]))
+		end
+	end
 end
 
 check("scope_set({}) returns { 'master' }", function()
-  assert_list_equal(core.scope_set({}), { "master" })
+	assert_list_equal(core.scope_set({}), { "master" })
 end)
 
 check("scope_set with slugs returns sorted slugs plus master", function()
-  assert_list_equal(
-    core.scope_set({ "fix-scope-selection.md", "auth-login.md" }),
-    { "auth-login", "fix-scope-selection", "master" }
-  )
+	assert_list_equal(
+		core.scope_set({ "fix-scope-selection.md", "auth-login.md" }),
+		{ "auth-login", "fix-scope-selection", "master" }
+	)
 end)
 
 check("scope_set dedups slugs", function()
-  assert_list_equal(core.scope_set({ "foo.md", "foo.md" }), { "foo", "master" })
+	assert_list_equal(core.scope_set({ "foo.md", "foo.md" }), { "foo", "master" })
 end)
 
 check("master task file does not duplicate", function()
-  assert_list_equal(core.scope_set({ "master.md" }), { "master" })
+	assert_list_equal(core.scope_set({ "master.md" }), { "master" })
 end)
 
 check("nil-safe", function()
-  assert_list_equal(core.scope_set(nil), { "master" })
+	assert_list_equal(core.scope_set(nil), { "master" })
 end)
 
 if failures == 0 then
